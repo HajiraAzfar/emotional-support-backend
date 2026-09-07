@@ -1,4 +1,11 @@
 import bcrypt
+import hashlib
+import secrets
+from datetime import datetime, timedelta, timezone
+
+from jose import JWTError, jwt
+
+from app.core.config import settings
 
 
 def hash_password(password: str) -> str:
@@ -8,12 +15,7 @@ def hash_password(password: str) -> str:
 
 
 def verify_password(password: str, password_hash: str) -> bool:
-    return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
-from datetime import datetime, timedelta, timezone
-
-from jose import JWTError, jwt
-
-from app.core.config import settings
+  return bcrypt.checkpw(password.encode("utf-8"), password_hash.encode("utf-8"))
 
 
 def create_access_token(account_id: str) -> str:
@@ -28,3 +30,11 @@ def decode_access_token(token: str) -> str | None:
         return payload.get("sub")
     except JWTError:
         return None
+
+
+def generate_refresh_token() -> str:
+    return secrets.token_urlsafe(48)
+
+
+def hash_refresh_token(token: str) -> str:
+    return hashlib.sha256(token.encode("utf-8")).hexdigest()

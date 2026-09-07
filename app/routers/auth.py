@@ -1,13 +1,19 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 
-
 from app.core.database import get_db
-from app.core.security import create_access_token, hash_password, verify_password
-from app.models.account import Account
-from app.schemas.account import AccountResponse, LoginRequest, SignupRequest, TokenResponse
 from app.core.dependencies import get_current_user
 from app.core.rate_limit import clear_failures, is_rate_limited, record_failure
+from app.core.security import hash_password, verify_password
+from app.core.tokens import issue_token_pair, rotate_refresh_token
+from app.models.account import Account
+from app.schemas.account import (
+    AccountResponse,
+    LoginRequest,
+    RefreshRequest,
+    SignupRequest,
+    TokenResponse,
+)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -29,7 +35,8 @@ def signup(payload: SignupRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(account)
 
-    return {"access_token": create_access_token(account.id), "account": account}
+    tokens = issue_token_pair(db, account.id)
+    return {**tokens, "account": account}
 
 
 @router.post("/login", response_model=TokenResponse)
@@ -51,7 +58,23 @@ def login(payload: LoginRequest, db: Session = Depends(get_db)):
 
     clear_failures(payload.email)
 
-    return {"access_token": create_access_token(account.id), "account": account}
+    tokens = issue_token_pair(db, account.id)
+    return {**tokens, "account": account}
+
+
+@router.post("/refresh", response_model=TokenResponse)
+def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
+    tokens = rotate_refresh_token(db, payload.refresh_token)
+
+    if tokens is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired refresh token.",
+        )
+
+    account = db.query(Account).filter(Account.id == tokens["account_id"]).first()
+    return {**tokens, "account": account}
+
 
 @router.get("/me", response_model=AccountResponse)
 def me(account: Account = Depends(get_current_user)):
