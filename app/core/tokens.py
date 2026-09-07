@@ -58,3 +58,9 @@ def rotate_refresh_token(db: Session, raw_token: str) -> dict | None:
     db.commit()
 
     return issue_token_pair(db, record.account_id, record.family_id)   
+
+def revoke_all_sessions(db: Session, account_id) -> None:
+    db.query(RefreshToken).filter(RefreshToken.account_id == account_id).update(
+        {"revoked": True}
+    )
+    db.commit()
