@@ -27,6 +27,9 @@ _CONTENT_DIR = Path(__file__).resolve().parent.parent / "content"
 with open(_CONTENT_DIR / "distress_scale.json", encoding="utf-8") as f:
     DISTRESS_SCALE = json.load(f)
 
+with open(_CONTENT_DIR / "focus_areas.json", encoding="utf-8") as f:
+    FOCUS_AREAS = json.load(f)
+
 
 @router.get("/status", response_model=OnboardingStatusResponse)
 def status_(
@@ -49,6 +52,11 @@ def distress_scale():
     return DISTRESS_SCALE
 
 
+@router.get("/focus-areas/options")
+def focus_area_options():
+    return FOCUS_AREAS
+
+
 @router.post("/consent", response_model=OnboardingStatusResponse)
 def consent(
     payload: ConsentRequest,
@@ -68,6 +76,13 @@ def focus_areas(
     account: Account = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
+    unknown = set(payload.codes) - set(FOCUS_AREAS)
+    if unknown:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unknown focus area codes: {', '.join(sorted(unknown))}",
+        )
+
     db.query(FocusArea).filter(FocusArea.account_id == account.id).delete()
 
     for code in set(payload.codes):
