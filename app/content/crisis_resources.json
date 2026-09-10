@@ -1,0 +1,27 @@
+{
+  "version": "1",
+  "locale": "en-PK",
+  "resources": [
+    {
+      "id": "emergency-1122",
+      "name": "Emergency Services (Rescue 1122)",
+      "phone": "1122",
+      "description": "National emergency response service. Call if you or someone else is in immediate physical danger.",
+      "last_verified": "2026-09-10"
+    },
+    {
+      "id": "umang",
+      "name": "Umang Pakistan",
+      "phone": "0311-7786264",
+      "description": "WHO-recognised mental health helpline supporting people experiencing suicidal thoughts.",
+      "last_verified": "2026-09-10"
+    },
+    {
+      "id": "rozan",
+      "name": "Rozan Counseling Helpline",
+      "phone": "0304-111-1741",
+      "description": "Free, confidential, non-judgemental counselling support for emotional distress.",
+      "last_verified": "2026-09-10"
+    }
+  ]
+}
