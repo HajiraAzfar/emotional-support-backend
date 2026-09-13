@@ -11,7 +11,7 @@ class Settings(BaseSettings):
     RESEND_API_KEY: str
     EMAIL_FROM: str = "onboarding@resend.dev"
     APP_BASE_URL: str = "http://127.0.0.1:8000"
-    
+    ELEVATED_DISTRESS_THRESHOLD: int = 9
 
     class Config:
         env_file = ".env"

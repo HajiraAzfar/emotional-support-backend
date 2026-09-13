@@ -44,6 +44,10 @@ def status_(
         "distress_baseline": account.distress_baseline,
         "weekly_goal": account.weekly_goal,
         "current_consent_version": settings.CONSENT_VERSION,
+         "elevated_distress": (
+            account.distress_baseline is not None
+            and account.distress_baseline >= settings.ELEVATED_DISTRESS_THRESHOLD
+        ),
     }
 
 

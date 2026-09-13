@@ -44,3 +44,35 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     token: str
     password: str = Field(min_length=8)
+
+class SignupEmailRequest(BaseModel):
+    email: EmailStr
+
+
+class VerifySignupCodeRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=6)
+
+
+class SetupTokenResponse(BaseModel):
+    setup_token: str
+
+
+class SetPasswordRequest(BaseModel):
+    setup_token: str
+    password: str = Field(min_length=8)
+
+
+class VerifyResetCodeRequest(BaseModel):
+    email: EmailStr
+    code: str = Field(min_length=6, max_length=6)
+
+
+class ResetTokenResponse(BaseModel):
+    reset_token: str
+
+
+class ResetPasswordCodeRequest(BaseModel):
+    reset_token: str
+    password: str = Field(min_length=8)
+    

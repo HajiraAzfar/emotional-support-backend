@@ -26,3 +26,4 @@ class OnboardingStatusResponse(BaseModel):
     distress_baseline: int | None
     weekly_goal: int
     current_consent_version: str
+    elevated_distress: bool = False

@@ -12,7 +12,7 @@ class Account(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     email = Column(String(255), unique=True, nullable=False, index=True)
-    password_hash = Column(String(255), nullable=False)
+    password_hash = Column(String(255), nullable=True)  # CHANGED: nullable for pending signups
     verified = Column(Boolean, default=False, nullable=False)
     weekly_goal = Column(Integer, default=3, nullable=False)
     interface_language = Column(String(10), default="en", nullable=False)
