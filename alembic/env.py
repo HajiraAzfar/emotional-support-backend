@@ -7,6 +7,9 @@ from alembic import context
 from app.core.config import settings
 from app.core.database import Base
 from app.models import *
+from app.models.entry import Entry          # yeh add karna hai
+from app.models.message import Message      # yeh add karna hai
+from app.models.captured_value import CapturedValue  # yeh add karna hai
 
 # this is the Alembic Config object, which provides
 # access to the values within the .ini file in use.
