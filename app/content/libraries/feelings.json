@@ -1,0 +1,305 @@
+{
+  "version": "1",
+  "status": "draft — pending clinical review (FR-PICK-002, FR-PICK-008)",
+  "categories": [
+    {
+      "id": "happy",
+      "name": "Happy",
+      "valence": "positive",
+      "focus_areas": [],
+      "items": [
+        {
+          "id": "joyful",
+          "name": "Joyful"
+        },
+        {
+          "id": "content",
+          "name": "Content"
+        },
+        {
+          "id": "grateful",
+          "name": "Grateful"
+        },
+        {
+          "id": "hopeful",
+          "name": "Hopeful"
+        },
+        {
+          "id": "proud",
+          "name": "Proud"
+        },
+        {
+          "id": "relieved",
+          "name": "Relieved"
+        },
+        {
+          "id": "excited",
+          "name": "Excited"
+        },
+        {
+          "id": "loved",
+          "name": "Loved"
+        },
+        {
+          "id": "confident",
+          "name": "Confident"
+        },
+        {
+          "id": "amused",
+          "name": "Amused"
+        }
+      ]
+    },
+    {
+      "id": "calm",
+      "name": "Calm & connected",
+      "valence": "positive",
+      "focus_areas": [],
+      "items": [
+        {
+          "id": "peaceful",
+          "name": "Peaceful"
+        },
+        {
+          "id": "relaxed",
+          "name": "Relaxed"
+        },
+        {
+          "id": "safe",
+          "name": "Safe"
+        },
+        {
+          "id": "connected",
+          "name": "Connected"
+        },
+        {
+          "id": "cared_for",
+          "name": "Cared for"
+        },
+        {
+          "id": "curious",
+          "name": "Curious"
+        },
+        {
+          "id": "inspired",
+          "name": "Inspired"
+        },
+        {
+          "id": "playful",
+          "name": "Playful"
+        },
+        {
+          "id": "energised",
+          "name": "Energised"
+        },
+        {
+          "id": "satisfied",
+          "name": "Satisfied"
+        }
+      ]
+    },
+    {
+      "id": "sad",
+      "name": "Sad",
+      "valence": "negative",
+      "focus_areas": [
+        "depression"
+      ],
+      "items": [
+        {
+          "id": "sad",
+          "name": "Sad"
+        },
+        {
+          "id": "down",
+          "name": "Down"
+        },
+        {
+          "id": "empty",
+          "name": "Empty"
+        },
+        {
+          "id": "disappointed",
+          "name": "Disappointed"
+        },
+        {
+          "id": "heavy",
+          "name": "Heavy"
+        },
+        {
+          "id": "tearful",
+          "name": "Tearful"
+        },
+        {
+          "id": "numb",
+          "name": "Numb"
+        },
+        {
+          "id": "hopeless",
+          "name": "Hopeless"
+        },
+        {
+          "id": "missing_someone",
+          "name": "Missing someone"
+        },
+        {
+          "id": "tired",
+          "name": "Tired"
+        }
+      ]
+    },
+    {
+      "id": "worried",
+      "name": "Worried",
+      "valence": "negative",
+      "focus_areas": [
+        "anxiety",
+        "ocd"
+      ],
+      "items": [
+        {
+          "id": "worried",
+          "name": "Worried"
+        },
+        {
+          "id": "nervous",
+          "name": "Nervous"
+        },
+        {
+          "id": "on_edge",
+          "name": "On edge"
+        },
+        {
+          "id": "restless",
+          "name": "Restless"
+        },
+        {
+          "id": "scared",
+          "name": "Scared"
+        },
+        {
+          "id": "uneasy",
+          "name": "Uneasy"
+        },
+        {
+          "id": "overwhelmed",
+          "name": "Overwhelmed"
+        },
+        {
+          "id": "unsure",
+          "name": "Unsure"
+        },
+        {
+          "id": "tense",
+          "name": "Tense"
+        },
+        {
+          "id": "pressured",
+          "name": "Pressured"
+        }
+      ]
+    },
+    {
+      "id": "angry",
+      "name": "Angry",
+      "valence": "negative",
+      "focus_areas": [
+        "addiction",
+        "trauma_ptsd"
+      ],
+      "items": [
+        {
+          "id": "angry",
+          "name": "Angry"
+        },
+        {
+          "id": "frustrated",
+          "name": "Frustrated"
+        },
+        {
+          "id": "irritated",
+          "name": "Irritated"
+        },
+        {
+          "id": "annoyed",
+          "name": "Annoyed"
+        },
+        {
+          "id": "resentful",
+          "name": "Resentful"
+        },
+        {
+          "id": "jealous",
+          "name": "Jealous"
+        },
+        {
+          "id": "impatient",
+          "name": "Impatient"
+        },
+        {
+          "id": "bitter",
+          "name": "Bitter"
+        },
+        {
+          "id": "fed_up",
+          "name": "Fed up"
+        },
+        {
+          "id": "betrayed",
+          "name": "Betrayed"
+        }
+      ]
+    },
+    {
+      "id": "hurt",
+      "name": "Hurt & alone",
+      "valence": "negative",
+      "focus_areas": [
+        "trauma_ptsd",
+        "depression"
+      ],
+      "items": [
+        {
+          "id": "hurt",
+          "name": "Hurt"
+        },
+        {
+          "id": "lonely",
+          "name": "Lonely"
+        },
+        {
+          "id": "left_out",
+          "name": "Left out"
+        },
+        {
+          "id": "ashamed",
+          "name": "Ashamed"
+        },
+        {
+          "id": "guilty",
+          "name": "Guilty"
+        },
+        {
+          "id": "embarrassed",
+          "name": "Embarrassed"
+        },
+        {
+          "id": "rejected",
+          "name": "Rejected"
+        },
+        {
+          "id": "misunderstood",
+          "name": "Misunderstood"
+        },
+        {
+          "id": "unappreciated",
+          "name": "Unappreciated"
+        },
+        {
+          "id": "insecure",
+          "name": "Insecure"
+        }
+      ]
+    }
+  ]
+}

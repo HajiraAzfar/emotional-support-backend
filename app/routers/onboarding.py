@@ -15,7 +15,9 @@ from app.schemas.onboarding import (
     DistressBaselineRequest,
     FocusAreasRequest,
     GoalRequest,
+    LifeVisionRequest,
     OnboardingStatusResponse,
+    WorkIssuesRequest,
 )
 
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
@@ -30,6 +32,9 @@ with open(_CONTENT_DIR / "distress_scale.json", encoding="utf-8") as f:
 with open(_CONTENT_DIR / "focus_areas.json", encoding="utf-8") as f:
     FOCUS_AREAS = json.load(f)
 
+with open(_CONTENT_DIR / "work_issues.json", encoding="utf-8") as f:
+    WORK_ISSUES = json.load(f)
+
 
 @router.get("/status", response_model=OnboardingStatusResponse)
 def status_(
@@ -41,10 +46,12 @@ def status_(
         "consent_version": account.consent_version,
         "consent_at": account.consent_at,
         "focus_areas": codes,
+        "work_issues": account.work_issues or [],
+        "life_vision": account.life_vision,
         "distress_baseline": account.distress_baseline,
         "weekly_goal": account.weekly_goal,
         "current_consent_version": settings.CONSENT_VERSION,
-         "elevated_distress": (
+        "elevated_distress": (
             account.distress_baseline is not None
             and account.distress_baseline >= settings.ELEVATED_DISTRESS_THRESHOLD
         ),
@@ -59,6 +66,11 @@ def distress_scale():
 @router.get("/focus-areas/options")
 def focus_area_options():
     return FOCUS_AREAS
+
+
+@router.get("/work-issues/options")
+def work_issue_options():
+    return WORK_ISSUES
 
 
 @router.post("/consent", response_model=OnboardingStatusResponse)
@@ -93,6 +105,36 @@ def focus_areas(
         db.add(FocusArea(account_id=account.id, code=code))
 
     db.commit()
+    return status_(account=account, db=db)
+
+
+@router.put("/work-issues", response_model=OnboardingStatusResponse)
+def work_issues(
+    payload: WorkIssuesRequest,
+    account: Account = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    unknown = set(payload.codes) - set(WORK_ISSUES)
+    if unknown:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail=f"Unknown work issue codes: {', '.join(sorted(unknown))}",
+        )
+    account.work_issues = list(set(payload.codes))
+    db.commit()
+    db.refresh(account)
+    return status_(account=account, db=db)
+
+
+@router.post("/life-vision", response_model=OnboardingStatusResponse)
+def life_vision(
+    payload: LifeVisionRequest,
+    account: Account = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    account.life_vision = payload.text
+    db.commit()
+    db.refresh(account)
     return status_(account=account, db=db)
 
 

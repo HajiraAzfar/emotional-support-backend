@@ -1,0 +1,22 @@
+{
+  "_comment": "Stored default wording, used ONLY when prompt generation is unavailable or fails validation (FR-ENT-023). In normal use the model words every capture prompt (FR-ENT-022).",
+  "check_in": {
+    "mood": "How are you feeling right now?",
+    "triggers": "Is anything in particular behind that? Pick any that fit, or skip.",
+    "trigger_note": "Would you like to say a little more about it? You can skip this too.",
+    "thinking_traps": "Did any of these thinking patterns show up? Pick any that fit, or skip.",
+    "feelings": "Which feelings are here with you right now?"
+  },
+  "free_write": {
+    "account": "This space is yours. Write whatever is on your mind."
+  },
+  "offer": "Thank you — your entry is saved. Would you like to talk it through a little, or stop here?",
+  "declined": "Okay. Your entry is saved — take care of yourself.",
+  "saved": "Your entry is saved. Please look after yourself — the people under Get help are there whenever you need them.",
+  "savouring": {
+    "event": "What's something good that happened recently — big or small?",
+    "significance": "What made it matter to you?",
+    "feelings": "Which feelings come up when you think about it?"
+  },
+  "savouring_close": "Thank you for noticing this and keeping it. Take a slow breath and let the moment stay with you a little longer."
+}

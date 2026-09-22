@@ -1,0 +1,31 @@
+{
+  "journal_type": "savouring",
+  "ending": "close",
+  "skills": [
+    "positive"
+  ],
+  "values": [
+    {
+      "id": "event",
+      "value_type": "text",
+      "control": "free_text",
+      "max_length": 2000,
+      "required": true
+    },
+    {
+      "id": "significance",
+      "value_type": "text",
+      "control": "free_text",
+      "max_length": 2000,
+      "required": false
+    },
+    {
+      "id": "feelings",
+      "value_type": "id_set",
+      "control": "multi_select",
+      "library": "feelings",
+      "prefer_valence": "positive",
+      "required": false
+    }
+  ]
+}

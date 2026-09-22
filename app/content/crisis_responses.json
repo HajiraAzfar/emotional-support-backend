@@ -1,0 +1,15 @@
+{
+  "version": "1",
+  "locale": "en-PK",
+  "status": "DRAFT — must be authored and approved by the Clinical Advisor before release (FR-CRIS-008)",
+  "mild": {
+    "reference": "If things ever feel too heavy, people are available to talk to, for free. You can find them anytime under Get help."
+  },
+  "danger": {
+    "full": "It sounds like you're carrying something really painful right now, and I'm glad you wrote it down. You don't have to face this alone — the people listed under Get help are available to talk right now, for free.\n\nAap akeli/akele nahi hain — Get help mein diye gaye log abhi aapki madad kar sakte hain.",
+    "abbreviated": "You don't have to carry this alone. People are available right now under Get help.\n\nMadad maujood hai — Get help dabayein."
+  },
+  "emergency": {
+    "full": "Your safety matters most right now. If you are in immediate danger or have taken something, call Rescue 1122 now. You can also call one of the helplines below — they are free and they will listen.\n\nAgar aap is waqt khatre mein hain, abhi 1122 par call karein."
+  }
+}

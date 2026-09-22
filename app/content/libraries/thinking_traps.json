@@ -1,0 +1,21 @@
+{
+  "version": "1",
+  "status": "draft — pending clinical review (FR-PICK-001, FR-PICK-008)",
+  "items": [
+    {"id": "all_or_nothing", "name": "All-or-nothing", "definition": "Seeing things in only two categories, with nothing in between.", "example": "If this isn't perfect, it's a total failure."},
+    {"id": "overgeneralising", "name": "Overgeneralising", "definition": "Treating one event as a never-ending pattern.", "example": "Ye hamesha mere saath hi hota hai."},
+    {"id": "mental_filter", "name": "Mental filter", "definition": "Focusing on one negative detail and filtering out the rest.", "example": "The whole day was ruined because of one comment."},
+    {"id": "discounting_positives", "name": "Discounting the positive", "definition": "Deciding that good things don't count.", "example": "They only said it was good to be polite."},
+    {"id": "mind_reading", "name": "Mind reading", "definition": "Assuming you know what others are thinking, usually something negative.", "example": "She didn't reply, so she must be upset with me."},
+    {"id": "fortune_telling", "name": "Fortune telling", "definition": "Predicting that things will turn out badly, as if it were certain.", "example": "I'll definitely mess up the interview."},
+    {"id": "catastrophising", "name": "Catastrophising", "definition": "Jumping to the worst possible outcome.", "example": "If I miss this deadline, my whole career is over."},
+    {"id": "magnifying_minimising", "name": "Magnifying and minimising", "definition": "Blowing up mistakes and shrinking strengths.", "example": "My one error matters more than everything I got right."},
+    {"id": "emotional_reasoning", "name": "Emotional reasoning", "definition": "Believing something is true because it feels true.", "example": "I feel useless, so I must be useless."},
+    {"id": "should_statements", "name": "Should statements", "definition": "Rigid rules about how you or others must behave.", "example": "Mujhe ab tak sab kuch samajh aa jana chahiye tha."},
+    {"id": "labelling", "name": "Labelling", "definition": "Attaching a harsh label to yourself or others after one event.", "example": "I forgot her birthday — I'm a terrible friend."},
+    {"id": "personalising", "name": "Personalising", "definition": "Taking responsibility for things that aren't fully in your control.", "example": "The party was boring because of me."},
+    {"id": "blaming", "name": "Blaming", "definition": "Holding others entirely responsible for how you feel.", "example": "It's all their fault that I'm like this."},
+    {"id": "comparing", "name": "Unfair comparisons", "definition": "Measuring yourself against others in ways that leave you short.", "example": "Everyone my age is married and settled except me."},
+    {"id": "what_if", "name": "What-if thinking", "definition": "A chain of 'what if' questions that never feels answered.", "example": "What if they say no? What if I embarrass myself?"}
+  ]
+}

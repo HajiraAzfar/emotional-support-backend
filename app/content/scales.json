@@ -1,0 +1,9 @@
+{
+  "mood_5": [
+    {"value": 1, "label": "Very low"},
+    {"value": 2, "label": "Low"},
+    {"value": 3, "label": "Okay"},
+    {"value": 4, "label": "Good"},
+    {"value": 5, "label": "Very good"}
+  ]
+}

@@ -11,6 +11,14 @@ class FocusAreasRequest(BaseModel):
     codes: list[str]
 
 
+class WorkIssuesRequest(BaseModel):
+    codes: list[str]
+
+
+class LifeVisionRequest(BaseModel):
+    text: str = Field(max_length=160)
+
+
 class DistressBaselineRequest(BaseModel):
     value: int = Field(ge=0, le=10)
 
@@ -23,6 +31,8 @@ class OnboardingStatusResponse(BaseModel):
     consent_version: str | None
     consent_at: datetime | None
     focus_areas: list[str]
+    work_issues: list[str] | None = None
+    life_vision: str | None = None
     distress_baseline: int | None
     weekly_goal: int
     current_consent_version: str

@@ -219,3 +219,4 @@ Recorded in full, with reasoning, in `DEVELOPMENT-LOG.md`.
 - The Supabase Data API is disabled for this project. The database is reachable only through this backend, not directly from any client.
 - Access tokens are bearer credentials and should be treated with the same care as passwords.
 - ⚠️ A temporary debug print statement in `app/core/verification.py` (inside `create_code`) currently logs generated codes to the server console, as a workaround for the email delivery limitation above. **It must be removed before any deployment beyond local development**, since logging a live authentication code is a genuine credential leak once real users are involved.
+UPD

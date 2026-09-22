@@ -1,0 +1,226 @@
+{
+  "version": "1",
+  "status": "draft — pending clinical review (FR-PICK-003, FR-PICK-008)",
+  "categories": [
+    {
+      "id": "work_study",
+      "name": "Work & study",
+      "focus_areas": [
+        "adhd",
+        "anxiety"
+      ],
+      "items": [
+        {
+          "id": "workload",
+          "name": "Workload"
+        },
+        {
+          "id": "deadline",
+          "name": "Deadline"
+        },
+        {
+          "id": "exams",
+          "name": "Exams"
+        },
+        {
+          "id": "boss_or_teacher",
+          "name": "Boss or teacher"
+        },
+        {
+          "id": "colleagues",
+          "name": "Colleagues"
+        },
+        {
+          "id": "job_search",
+          "name": "Job search"
+        },
+        {
+          "id": "feedback",
+          "name": "Feedback"
+        },
+        {
+          "id": "commute",
+          "name": "Commute"
+        }
+      ]
+    },
+    {
+      "id": "family_home",
+      "name": "Family & home",
+      "focus_areas": [
+        "trauma_ptsd",
+        "depression"
+      ],
+      "items": [
+        {
+          "id": "parents",
+          "name": "Parents"
+        },
+        {
+          "id": "in_laws",
+          "name": "In-laws"
+        },
+        {
+          "id": "children",
+          "name": "Children"
+        },
+        {
+          "id": "siblings",
+          "name": "Siblings"
+        },
+        {
+          "id": "housework",
+          "name": "Housework"
+        },
+        {
+          "id": "family_expectations",
+          "name": "Family expectations"
+        },
+        {
+          "id": "marriage_pressure",
+          "name": "Marriage pressure"
+        }
+      ]
+    },
+    {
+      "id": "relationships",
+      "name": "People & relationships",
+      "focus_areas": [
+        "trauma_ptsd",
+        "depression"
+      ],
+      "items": [
+        {
+          "id": "partner",
+          "name": "Partner"
+        },
+        {
+          "id": "friends",
+          "name": "Friends"
+        },
+        {
+          "id": "argument",
+          "name": "Argument"
+        },
+        {
+          "id": "feeling_ignored",
+          "name": "Feeling ignored"
+        },
+        {
+          "id": "social_event",
+          "name": "Social event"
+        },
+        {
+          "id": "social_media",
+          "name": "Social media"
+        },
+        {
+          "id": "being_alone",
+          "name": "Being alone"
+        }
+      ]
+    },
+    {
+      "id": "health_body",
+      "name": "Health & body",
+      "focus_areas": [
+        "depression",
+        "addiction"
+      ],
+      "items": [
+        {
+          "id": "sleep",
+          "name": "Sleep"
+        },
+        {
+          "id": "illness",
+          "name": "Illness"
+        },
+        {
+          "id": "periods",
+          "name": "Periods"
+        },
+        {
+          "id": "body_image",
+          "name": "Body image"
+        },
+        {
+          "id": "food",
+          "name": "Food"
+        },
+        {
+          "id": "exercise",
+          "name": "Exercise"
+        }
+      ]
+    },
+    {
+      "id": "money_practical",
+      "name": "Money & practical",
+      "focus_areas": [
+        "anxiety"
+      ],
+      "items": [
+        {
+          "id": "money",
+          "name": "Money"
+        },
+        {
+          "id": "bills",
+          "name": "Bills"
+        },
+        {
+          "id": "housing",
+          "name": "Housing"
+        },
+        {
+          "id": "travel",
+          "name": "Travel"
+        },
+        {
+          "id": "weather",
+          "name": "Weather"
+        },
+        {
+          "id": "news",
+          "name": "News"
+        }
+      ]
+    },
+    {
+      "id": "inner",
+      "name": "Inside me",
+      "focus_areas": [
+        "anxiety",
+        "ocd",
+        "depression"
+      ],
+      "items": [
+        {
+          "id": "a_memory",
+          "name": "A memory"
+        },
+        {
+          "id": "the_future",
+          "name": "The future"
+        },
+        {
+          "id": "a_decision",
+          "name": "A decision"
+        },
+        {
+          "id": "a_mistake",
+          "name": "A mistake"
+        },
+        {
+          "id": "comparison",
+          "name": "Comparing myself"
+        },
+        {
+          "id": "nothing_specific",
+          "name": "Nothing specific"
+        }
+      ]
+    }
+  ]
+}
