@@ -1,3 +1,8 @@
+---
+name: general
+description: Neutral, everyday or mixed content. Use as the fallback when no other skill clearly fits — never alongside another skill.
+---
+
 # Skill: general
 
 Neutral fallback — used when no specific topic is detected.

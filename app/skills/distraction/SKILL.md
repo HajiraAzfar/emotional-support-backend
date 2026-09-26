@@ -1,3 +1,8 @@
+---
+name: distraction
+description: Procrastination, scrolling, losing the day, not being able to start or focus. Use when the message is about avoiding a task.
+---
+
 # Skill: distraction & procrastination
 
 ## Workflow

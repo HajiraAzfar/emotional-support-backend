@@ -6,6 +6,7 @@ from pydantic import BaseModel
 
 from app.core.capture import all_value_ids
 from app.core.config import settings
+from app.core import md_loader
 from app.core.md_loader import DOMAINS
 
 logger = logging.getLogger(__name__)
@@ -54,6 +55,7 @@ class Closing(BaseModel):
 class Reflection(BaseModel):
     # Field order matters: the model decides whether to close before it writes the reply.
     same_concern_count: int
+    shift_noticed: bool
     closure_reason: ClosureReason
     session_end: bool
     response_text: str
@@ -99,16 +101,7 @@ describe the user's LATEST message (earlier messages are context only). Messages
 be English, Roman Urdu or mixed.
 
 Topics:
-- low_mood: sadness, no energy, no motivation, emptiness
-- low_self_esteem: self-criticism, feeling not good enough, worthless
-- relationship_issues: family, partner, friends, conflict, loneliness with people
-- distraction: procrastination, can't focus, wasting time
-- lack_of_self_control: urges, bingeing, impulsive habits, breaking promises to self
-- overwhelmed: too much at once, pressure, stress from many demands
-- overthinking: replaying, what-ifs, worry loops, rumination
-- grief: death or loss of someone (or something) important
-- positive: good day, achievement, gratitude, happiness
-- general: neutral, everyday, or nothing clearly above
+{topics}
 
 Put the most important topic first. Use general only on its own.
 
@@ -134,6 +127,11 @@ def classify(
     if settings.LLM_MOCK:
         return Classification(domains=["general"], risk_tier=None)
 
+    # The topic list comes from each skill's description (Agent Skills frontmatter),
+    # so a skill is chosen by the same words that say when it applies.
+    descriptions = md_loader.skill_descriptions()
+    topics = "\n".join(f"- {name}: {descriptions[name]}" for name in DOMAINS)
+
     hint = ""
     if work_issues:
         hint = (
@@ -143,7 +141,7 @@ def classify(
     try:
         response = _get_client().responses.parse(
             model=settings.OPENAI_CLASSIFIER_MODEL,
-            instructions=_CLASSIFIER_INSTRUCTIONS.format(hint=hint),
+            instructions=_CLASSIFIER_INSTRUCTIONS.format(topics=topics, hint=hint),
             input=_as_input(history[-CLASSIFIER_HISTORY:], text),
             text_format=DomainResult,
             store=False,
@@ -224,6 +222,7 @@ def _mock_reflection(text: str | None) -> Reflection:
     if ending:
         return Reflection(
             same_concern_count=1,
+            shift_noticed=False,
             response_text="(Mock) You took time to check in today. Maybe take three slow breaths before you go.",
             session_end=True,
             closure_reason="minimal_replies",
@@ -232,6 +231,7 @@ def _mock_reflection(text: str | None) -> Reflection:
         )
     return Reflection(
         same_concern_count=1,
+        shift_noticed=False,
         response_text="(Mock) Thanks for sharing that. What stood out to you most?",
         session_end=False,
         closure_reason="none",

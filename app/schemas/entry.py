@@ -5,9 +5,10 @@ from typing import Literal
 from pydantic import BaseModel
 from app.schemas.message import MessageOut
 
-
 class EntryCreate(BaseModel):
     journal_type: str
+    # FR-JRN-006: start a further exposure cycle from a completed one.
+    parent_entry_id: uuid.UUID | None = None
 
 
 class ScaleOption(BaseModel):
@@ -23,6 +24,8 @@ class CaptureSpec(BaseModel):
     library: str | None = None
     scale: list[ScaleOption] | None = None
     max_length: int | None = None
+    # The user may send this value in several messages before moving on.
+    repeatable: bool = False
     # Library categories of this valence are listed first (e.g. positive feelings when savouring).
     prefer_valence: str | None = None
 
@@ -32,6 +35,9 @@ class CaptureAnswer(BaseModel):
     # int for a scale, list of library ids for multi_select, text for free_text.
     value: int | list[str] | str | None = None
     skipped: bool = False
+    # Repeatable values only: she is still writing, so keep this value open
+    # and do not move on yet.
+    more: bool = False
 
 
 class ConversationChoice(BaseModel):
@@ -50,6 +56,9 @@ class EntryOut(BaseModel):
     conversation_status: str | None = None
     # Highest crisis tier in this entry: None/clear | mild | danger | emergency
     crisis_tier: str | None = None
+    # FR-JRN-007: shown before the first value; the client must acknowledge it.
+    pending_notice: str | None = None
+    parent_entry_id: uuid.UUID | None = None
     # FR-CRIS-005: resource reference shown at the end of a completed mild-tier entry.
     support_note: str | None = None
     next_capture: CaptureSpec | None = None
@@ -80,3 +89,9 @@ class EntrySummary(BaseModel):
     completed_at: datetime | None = None
     last_activity_at: datetime
     mood: int | None = None
+    # The user's name for a deep-dive entry, or a date-based one (FR-ENT-009).
+    name: str | None = None
+    # Which exposure cycle this is: 1 for the first, 2 for the next, and so on (FR-JRN-006).
+    cycle: int | None = None
+    # The opening of what she wrote, so an entry is recognisable in the list.
+    preview: str | None = None

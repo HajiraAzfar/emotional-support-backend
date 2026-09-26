@@ -1,3 +1,8 @@
+---
+name: overwhelmed
+description: Too much at once, pressure from many directions. Use when the message lists several demands or says everything is too much.
+---
+
 # Skill: feeling overwhelmed
 
 ## Workflow

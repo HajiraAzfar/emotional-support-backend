@@ -1,3 +1,8 @@
+---
+name: positive
+description: Good days, achievements, gratitude and happiness. Use when the message is about something that went well, and for every savouring entry.
+---
+
 # Skill: positive moments
 
 Detected from the message only (not an onboarding option). Needed for savouring.

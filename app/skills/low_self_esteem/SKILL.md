@@ -1,3 +1,8 @@
+---
+name: low_self_esteem
+description: Harsh self-criticism and feeling not good enough. Use when the message is about being useless, a failure, or worse than others.
+---
+
 # Skill: low self-esteem
 
 ## Workflow

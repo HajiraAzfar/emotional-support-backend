@@ -1,3 +1,8 @@
+---
+name: grief
+description: Death or loss of someone (or something) important. Use when the message mentions someone who died, is gone, or is deeply missed. Detected from the message only — not an onboarding option.
+---
+
 # Skill: grief
 
 Detected from the message only (not an onboarding option).

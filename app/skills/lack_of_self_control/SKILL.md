@@ -1,3 +1,8 @@
+---
+name: lack_of_self_control
+description: Urges, bingeing, impulsive habits and broken promises to oneself. Use when the message is about doing something they meant not to do.
+---
+
 # Skill: lack of self-control
 
 ## Workflow

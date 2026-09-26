@@ -1,3 +1,8 @@
+---
+name: overthinking
+description: Replaying, what-ifs, rumination and worry loops. Use when the message circles the same thought or predicts what others think.
+---
+
 # Skill: overthinking & rumination
 
 ## Workflow

@@ -17,9 +17,17 @@ def _read(path: Path) -> Any:
 
 _SCHEDULE_FILES = {p.stem: _read(p) for p in (_CONTENT_DIR / "capture_schedules").glob("*.json")}
 SCHEDULES: dict[str, list[dict]] = {name: f["values"] for name, f in _SCHEDULE_FILES.items()}
-# What happens after the last value: "offer" the AI conversation (default), or "close"
-# the thread with one closing message and no conversation (savouring, FR-JRN-002).
+# What happens after the last value: "offer" the AI conversation (default), "close"
+# it with one closing message (savouring, FR-JRN-002), or "grounding" — a fixed
+# grounding message and no conversation (thought trauma variant, FR-JRN-005/008).
 ENDINGS: dict[str, str] = {name: f.get("ending", "offer") for name, f in _SCHEDULE_FILES.items()}
+# An alternative schedule for users with particular focus areas (FR-JRN-005).
+VARIANTS: dict[str, dict] = {name: f["variant"] for name, f in _SCHEDULE_FILES.items() if "variant" in f}
+# Journals that end with a grounding message for users with the past-event focus
+# area, whatever their ending (FR-JRN-008).
+GROUNDING_JOURNALS = {"free_write", "thought"}
+GROUNDING_FOCUS = "trauma_ptsd"
+GROUNDING: dict = _read(_CONTENT_DIR / "grounding.json")
 # Skills that always apply to a journal type, whatever the detected topic
 # (e.g. savouring is always about a good moment → skills/positive.md).
 JOURNAL_SKILLS: dict[str, list[str]] = {name: f.get("skills", []) for name, f in _SCHEDULE_FILES.items()}
@@ -29,6 +37,11 @@ LIBRARIES: dict[str, dict] = {
 SCALES: dict[str, list[dict]] = _read(_CONTENT_DIR / "scales.json")
 FALLBACKS: dict = _read(_CONTENT_DIR / "capture_fallbacks.json")
 
+# FR-JRN-007: a fixed notice shown before the first value, for users with the
+# past-event focus area. The schedule names which notice; the text is content.
+NOTICES: dict[str, str | None] = {name: f.get("notice") for name, f in _SCHEDULE_FILES.items()}
+NOTICE_FOCUS = "trauma_ptsd"
+NOTICE_TEXTS: dict = _read(_CONTENT_DIR / "exposure_notice.json")
 
 def _library_items(name: str) -> list[dict]:
     lib = LIBRARIES[name]
@@ -54,6 +67,10 @@ def _check_content() -> None:
                 raise RuntimeError(f"{journal_type}.{spec['id']}: no fallback wording")
         if ENDINGS[journal_type] == "close" and f"{journal_type}_close" not in FALLBACKS:
             raise RuntimeError(f"{journal_type}: no fallback closing message")
+        variant = VARIANTS.get(journal_type, {})
+        unknown = (set(variant.get("omit", [])) | set(variant.get("optional", []))) - {v["id"] for v in values}
+        if unknown:
+            raise RuntimeError(f"{journal_type} variant names values that do not exist: {sorted(unknown)}")
 
 
 _check_content()
@@ -106,9 +123,58 @@ def all_value_ids() -> tuple[str, ...]:
     return tuple(sorted({v["id"] for values in SCHEDULES.values() for v in values}))
 
 
-def next_value(journal_type: str, recorded: set[str]) -> dict | None:
+def _variant_applies(journal_type: str, focus_codes: list[str]) -> bool:
+    variant = VARIANTS.get(journal_type)
+    return bool(variant and set(focus_codes) & set(variant["when_focus"]))
+
+
+def values_for(journal_type: str, focus_codes: list[str] | None = None) -> list[dict]:
+    """
+    The schedule this user gets. The trauma variant drops some values and makes
+    others optional (FR-JRN-005); everyone else gets the base schedule.
+    """
+    values = SCHEDULES[journal_type]
+    if not _variant_applies(journal_type, focus_codes or []):
+        return values
+    variant = VARIANTS[journal_type]
+    omit, optional = set(variant.get("omit", [])), set(variant.get("optional", []))
+    return [
+        {**spec, "required": False} if spec["id"] in optional else spec
+        for spec in values
+        if spec["id"] not in omit
+    ]
+
+
+def ending_for(journal_type: str, focus_codes: list[str] | None = None) -> str:
+    if _variant_applies(journal_type, focus_codes or []):
+        return VARIANTS[journal_type].get("ending", ENDINGS[journal_type])
+    return ENDINGS[journal_type]
+
+
+def needs_grounding(journal_type: str, focus_codes: list[str] | None) -> bool:
+    """FR-JRN-008: the thread's final message for past-event focus users."""
+    return journal_type in GROUNDING_JOURNALS and GROUNDING_FOCUS in (focus_codes or [])
+
+def notice_for(journal_type: str, focus_codes: list[str] | None) -> str | None:
+    """The scope notice this user must see first, if any (FR-JRN-007)."""
+    notice = NOTICES.get(journal_type)
+    if not notice or NOTICE_FOCUS not in (focus_codes or []):
+        return None
+    return NOTICE_TEXTS[notice]
+
+
+def carried_values(journal_type: str) -> list[str]:
+    """Values a further cycle reuses from the cycle it continues (FR-JRN-006)."""
+    return ["feared_outcome"] if journal_type == "exposure" else []
+
+
+def grounding_message() -> str:
+    return GROUNDING["message"]
+
+
+def next_value(values: list[dict], recorded: set[str]) -> dict | None:
     """The first value in the schedule without a response or skip (FR-ENT-024)."""
-    for spec in SCHEDULES[journal_type]:
+    for spec in values:
         if spec["id"] not in recorded:
             return spec
     return None
@@ -178,17 +244,19 @@ def spec_out(spec: dict) -> dict:
         "scale": SCALES[spec["scale"]] if spec["control"] == "scale" else None,
         "max_length": spec.get("max_length"),
         "prefer_valence": spec.get("prefer_valence"),
+        # FR-JRN-003: free write is one value the user may send in several messages.
+        "repeatable": bool(spec.get("repeatable")),
     }
     return out
 
 
-def summary(journal_type: str, recorded: dict[str, Any], extra: Extra = None) -> str:
+def summary(values: list[dict], recorded: dict[str, Any], extra: Extra = None) -> str:
     """
     Plain-language record of the entry for the model (FR-AIR-002).
     recorded maps value_id → stored value (None = skipped).
     """
     lines = []
-    for spec in SCHEDULES[journal_type]:
+    for spec in values:
         if spec["id"] not in recorded:
             continue
         value = recorded[spec["id"]]

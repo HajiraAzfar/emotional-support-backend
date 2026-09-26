@@ -1,6 +1,6 @@
 {
   "journal_type": "free_write",
   "values": [
-    {"id": "account", "value_type": "text", "control": "free_text", "max_length": 20000, "required": true}
+    {"id": "account", "value_type": "text", "control": "free_text", "max_length": 20000, "required": true, "repeatable": true}
   ]
 }

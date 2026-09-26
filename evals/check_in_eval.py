@@ -31,6 +31,9 @@ class Case:
     user_turns: list[str]
     must_mention: list[str]  # any one of these (case-insensitive) in the first reply
     expect_close_by: int | None = None  # user turn index (1-based) by which the session must close
+    # (turn index, at least this many turns before closing): she moved here, so the
+    # conversation should consolidate before it ends rather than stopping dead.
+    taper_from: int | None = None
     results: list[str] = field(default_factory=list)
 
 
@@ -49,6 +52,16 @@ CASES = [
         user_turns=["haan shayad woh mujh se naraz hai", "idk", "yeah"],
         must_mention=["boss", "meeting", "ignore", "mind reading", "naraz"],
         expect_close_by=3,
+    ),
+    Case(
+        name="shift on turn 2 → consolidate, then close",
+        recorded={"mood": 2, "triggers": ["boss_or_teacher"], "trigger_note": "boss ignored me in the meeting",
+                  "thinking_traps": ["mind_reading"], "feelings": ["hurt"]},
+        user_turns=["I think he's angry with me", "actually he was in back-to-back meetings all day, maybe it wasn't about me",
+                    "yeah that does make more sense"],
+        must_mention=["boss", "meeting", "ignored", "mind reading", "hurt"],
+        expect_close_by=3,
+        taper_from=2,
     ),
     Case(
         name="good day → user asks to stop",
@@ -80,14 +93,15 @@ def run_capture_checks() -> list[str]:
     failures = []
     recorded: dict = {}
     previous = None
-    for spec in capture.SCHEDULES["check_in"]:
-        prompt = context_builder.build_capture_prompt(FOCUS, "check_in", capture.summary("check_in", recorded), spec["id"], previous)
+    values = capture.values_for("check_in", FOCUS)
+    for spec in values:
+        prompt = context_builder.build_capture_prompt(FOCUS, "check_in", capture.summary(values, recorded), spec["id"], previous)
         result = llm_client.generate_capture_prompt(prompt, spec["id"])
         if result is None:
             failures.append(f"capture {spec['id']}: no usable prompt (fallback would be used)")
         else:
             text = result.message_text
-            if text.count("?") > 1:
+            if enforcement.count_questions(text) > 1:
                 failures.append(f"capture {spec['id']}: more than one question: {text!r}")
             if len(text.split()) > 40:
                 failures.append(f"capture {spec['id']}: too long ({len(text.split())} words)")
@@ -99,14 +113,15 @@ def run_capture_checks() -> list[str]:
 
 def run_case(case: Case) -> list[str]:
     failures = []
-    summary = capture.summary("check_in", case.recorded)
+    summary = capture.summary(capture.values_for("check_in", FOCUS), case.recorded)
     history: list[tuple[str, str]] = []
     closed_at = None
+    stage = None
 
     turns = [None] + case.user_turns  # None = Echo speaks first
     for i, text in enumerate(turns):
         domains = llm_client.classify(history, text or summary, ACCOUNT.work_issues).domains or ["general"]
-        close_reason = enforcement.required_closure(history, text, settings.CONVERSATION_CONTAINMENT_TURNS)
+        close_reason = enforcement.required_closure(history, text, settings.CONVERSATION_CONTAINMENT_TURNS, stage)
         free_text = [case.recorded["trigger_note"]] if case.recorded.get("trigger_note") else []
         user_texts = free_text + [c for role, c in history if role == "user"] + ([text] if text else [])
         expected_lang = language.reply_language(user_texts)
@@ -114,11 +129,12 @@ def run_case(case: Case) -> list[str]:
             ACCOUNT, FOCUS, domains, "check_in", summary, close_reason, expected_lang
         )
         outcome = enforcement.enforce(llm_client.generate_reflection(prompt, history, text), close_reason)
+        stage = enforcement.CONFIRMING if outcome.shift_noticed else enforcement.EXPLORING
         reply = outcome.reply_text
 
         if i == 0 and not any(k.lower() in reply.lower() for k in case.must_mention):
             failures.append(f"first reply mentions nothing recorded (FR-AIR-002): {reply!r}")
-        if reply.count("?") > 1:
+        if enforcement.count_questions(reply) > 1:
             failures.append(f"turn {i}: more than one question (FR-AIR-003): {reply!r}")
         tum = language.TUM_WORDS.findall(reply)
         if tum:
@@ -126,8 +142,11 @@ def run_case(case: Case) -> list[str]:
         got_lang = language.detect(reply)
         if got_lang and not _language_ok(expected_lang, got_lang):
             failures.append(f"turn {i}: expected a {expected_lang} reply, got {got_lang}: {reply!r}")
-        if outcome.session_end and "?" in reply:
+        if outcome.session_end and enforcement.count_questions(reply):
             failures.append(f"turn {i}: closing message has a question (FR-AIR-010): {reply!r}")
+
+        if case.taper_from is not None and i == case.taper_from and outcome.session_end:
+            failures.append(f"closed abruptly on the turn she moved, with no consolidating reply: {reply!r}")
 
         if text is not None:
             history.append(("user", text))
@@ -156,14 +175,15 @@ def run_savouring_checks() -> list[str]:
         texts = [recorded["event"], recorded["significance"]]
         lang = language.reply_language(texts)
         prompt = context_builder.build_closing_prompt(
-            FOCUS, "savouring", capture.summary("savouring", recorded), lang, capture.JOURNAL_SKILLS["savouring"]
+            FOCUS, "savouring", capture.summary(capture.values_for("savouring", FOCUS), recorded), lang,
+            capture.JOURNAL_SKILLS["savouring"]
         )
         text = llm_client.generate_closing(prompt)
         if text is None:
             failures.append(f"savouring {recorded['event'][:25]!r}: no usable closing")
             continue
         text = enforcement.limit_questions(text, allowed=0)
-        if "?" in text:
+        if enforcement.count_questions(text):
             failures.append(f"savouring closing has a question: {text!r}")
         if not any(k in text.lower() for k in keywords):
             failures.append(f"savouring closing doesn't mention the moment: {text!r}")

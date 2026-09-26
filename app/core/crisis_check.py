@@ -22,6 +22,11 @@ CRISIS_PATTERNS = [
     r"\bzindagi khatam\b",
     r"\bjeena nahi chahta\b",
     r"\bjeena nahi chahti\b",
+    r"\bjeene ka (koi )?(dil|mann|man|maza) nahi\b",
+    r"\bjeene ki (koi )?(wajah|umeed|khwahish) nahi\b",
+    r"\b(mar|marr) ?(jane|jaane) ko dil\b",
+    r"\bmarne ka dil\b",
+    r"\bab nahi jeena\b",
 ]
 
 # Phrases that would otherwise false-positive against the patterns above.

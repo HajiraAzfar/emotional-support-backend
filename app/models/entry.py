@@ -1,6 +1,6 @@
 import uuid
 from datetime import datetime
-from sqlalchemy import Column, String, DateTime, Integer, ForeignKey, ARRAY
+from sqlalchemy import Boolean, Column, String, DateTime, Integer, ForeignKey, ARRAY
 from sqlalchemy.dialects.postgresql import UUID
 from app.core.database import Base
 
@@ -18,7 +18,14 @@ class Entry(Base):
     conversation_status = Column(String(20), nullable=True)
     # Recorded, never shown to the user (FR-AIR-012).
     closure_reason = Column(String(40), nullable=True)
+    # Where the conversation is: exploring, or confirming a shift the user reached
+    # (one gentle consolidating turn before the closing message).
+    conversation_stage = Column(String(20), nullable=True)
     # Highest crisis tier assigned within this entry; danger/emergency suppress all AI for it (FR-CRIS-006/007).
     crisis_tier = Column(String(12), nullable=True)
+        # FR-JRN-006: the cycle this one continues, so a further cycle can reuse the feared outcome.
+    parent_entry_id = Column(UUID(as_uuid=True), ForeignKey("entries.id", ondelete="SET NULL"), nullable=True)
+    # FR-JRN-007: the scope notice must be acknowledged before the first value is requested.
+    notice_acknowledged = Column(Boolean, default=False, nullable=False)
     started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)

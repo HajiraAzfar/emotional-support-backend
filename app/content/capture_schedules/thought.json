@@ -1,0 +1,21 @@
+{
+  "journal_type": "thought",
+  "ending": "offer",
+  "values": [
+    {"id": "name", "value_type": "text", "control": "free_text", "max_length": 60, "required": false},
+    {"id": "situation", "value_type": "text", "control": "free_text", "max_length": 2000, "required": true},
+    {"id": "automatic_thought", "value_type": "text", "control": "free_text", "max_length": 2000, "required": true},
+    {"id": "thinking_traps", "value_type": "id_set", "control": "multi_select", "library": "thinking_traps", "required": false},
+    {"id": "feelings", "value_type": "id_set", "control": "multi_select", "library": "feelings", "required": false},
+    {"id": "supporting_evidence", "value_type": "text", "control": "free_text", "max_length": 2000, "required": false},
+    {"id": "contradicting_evidence", "value_type": "text", "control": "free_text", "max_length": 2000, "required": false},
+    {"id": "revised_thought", "value_type": "text", "control": "free_text", "max_length": 2000, "required": false}
+  ],
+  "variant": {
+    "_comment": "FR-JRN-005: trauma variant. No supporting evidence (it can entrench the belief), the situation is optional (no pressure to retell the event), and the thread ends with a grounding message instead of a conversation.",
+    "when_focus": ["trauma_ptsd"],
+    "omit": ["supporting_evidence"],
+    "optional": ["situation"],
+    "ending": "grounding"
+  }
+}

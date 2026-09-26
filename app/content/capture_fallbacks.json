@@ -18,5 +18,24 @@
     "significance": "What made it matter to you?",
     "feelings": "Which feelings come up when you think about it?"
   },
-  "savouring_close": "Thank you for noticing this and keeping it. Take a slow breath and let the moment stay with you a little longer."
+  "savouring_close": "Thank you for noticing this and keeping it. Take a slow breath and let the moment stay with you a little longer.",
+  "thought": {
+    "name": "What would you like to call this entry? You can skip and I'll date it.",
+    "situation": "What was happening when the thought showed up?",
+    "automatic_thought": "What was the thought, in the words it came in?",
+    "thinking_traps": "Did any of these thinking patterns show up with it? Pick any that fit, or skip.",
+    "feelings": "What did you feel in that moment?",
+    "supporting_evidence": "What makes that thought feel true? You can skip this.",
+    "contradicting_evidence": "And is there anything that doesn't fit the thought? You can skip this too.",
+    "revised_thought": "Knowing all that, how would you put the thought now?"
+  },
+  "exposure": {
+    "feared_outcome": "What are you afraid will happen?",
+    "distress_before": "Thinking about it right now, how strong is the distress?",
+    "planned_activity": "What will you do, and when?",
+    "post_account": "You're back — how did it go?",
+    "distress_during": "How strong was the distress while you were doing it?",
+    "distress_after": "And how strong is it now?",
+    "learning": "What do you take away from this?"
+  }
 }

@@ -1,3 +1,8 @@
+---
+name: low_mood
+description: Sadness, heaviness, no energy or no motivation. Use when the message is about feeling down, flat, drained or unable to get going.
+---
+
 # Skill: low mood & motivation
 
 ## Workflow

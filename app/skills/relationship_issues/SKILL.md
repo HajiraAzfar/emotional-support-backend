@@ -1,3 +1,8 @@
+---
+name: relationship_issues
+description: Family, partner, friends, in-laws, arguments and feeling unseen by people. Use when the message is about another person or a conflict.
+---
+
 # Skill: relationship issues
 
 ## Workflow
