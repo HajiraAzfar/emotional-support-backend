@@ -6,6 +6,19 @@
     {"value": 4, "label": "Good"},
     {"value": 5, "label": "Very good"}
   ],
+  "intensity_11": [
+    {"value": 0, "label": "Barely there"},
+    {"value": 1, "label": "Very faint"},
+    {"value": 2, "label": "Slight"},
+    {"value": 3, "label": "Mild but noticeable"},
+    {"value": 4, "label": "Clearly there"},
+    {"value": 5, "label": "Moderate"},
+    {"value": 6, "label": "Strong"},
+    {"value": 7, "label": "Very strong"},
+    {"value": 8, "label": "Hard to set aside"},
+    {"value": 9, "label": "Almost too much"},
+    {"value": 10, "label": "As strong as it gets"}
+  ],
   "distress_11": [
     {"value": 0, "label": "No distress at all"},
     {"value": 1, "label": "Barely noticeable"},

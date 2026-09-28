@@ -82,6 +82,7 @@ def build_system_prompt(
     entry_summary: str,
     close_reason: str | None = None,
     reply_language: str = language.ENGLISH,
+    repeat_limit: int = 3,
 ) -> str:
     """
     Order: base → clinical context (highest priority) → skills → journal type
@@ -100,6 +101,13 @@ def build_system_prompt(
     sections.append(_profile(account, domains))
     sections.append(f"# Recorded entry\n{entry_summary}")
     sections.append(f"# Reply language\n{language.instruction(reply_language)}")
+    # The code closes on this count, so the prompt must name the same one
+    # (an extended journal allows more circling than the default).
+    sections.append(
+        "# Session length\n"
+        f"Close with `repeated_concern` when she has restated the same concern {repeat_limit} times "
+        "without anything changing. Below that, stay with her — restating is not a reason to end."
+    )
 
     if close_reason:
         # Detected by code (enforcement.required_closure); never shown to the user.

@@ -1,0 +1,14 @@
+{
+  "_comment": "How long a reflection conversation may run, per journal type (FR-AIR-009, FR-AIR-013). A journal not listed here uses the default. containment_turns null means the app-wide setting CONVERSATION_CONTAINMENT_TURNS.",
+  "default": {
+    "repeat_limit": 3,
+    "minimal_replies": 2,
+    "containment_turns": null
+  },
+  "free_write": {
+    "_comment": "An extended session: she came to say what is on her mind, not to solve one problem in three turns. Circling the same thing is what unburdening looks like, and one 'hmm' while she thinks is not disengagement. The containment failsafe still applies, further out.",
+    "repeat_limit": 5,
+    "minimal_replies": 3,
+    "containment_turns": 60
+  }
+}

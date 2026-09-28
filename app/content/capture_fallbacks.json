@@ -5,7 +5,8 @@
     "triggers": "Is anything in particular behind that? Pick any that fit, or skip.",
     "trigger_note": "Would you like to say a little more about it? You can skip this too.",
     "thinking_traps": "Did any of these thinking patterns show up? Pick any that fit, or skip.",
-    "feelings": "Which feelings are here with you right now?"
+    "feelings": "Which feelings are here with you right now?",
+    "feeling_intensity": "How strong is that, right now?"
   },
   "free_write": {
     "account": "This space is yours. Write whatever is on your mind."
@@ -25,6 +26,7 @@
     "automatic_thought": "What was the thought, in the words it came in?",
     "thinking_traps": "Did any of these thinking patterns show up with it? Pick any that fit, or skip.",
     "feelings": "What did you feel in that moment?",
+    "feeling_intensity": "How strong was that feeling at the time?",
     "supporting_evidence": "What makes that thought feel true? You can skip this.",
     "contradicting_evidence": "And is there anything that doesn't fit the thought? You can skip this too.",
     "revised_thought": "Knowing all that, how would you put the thought now?"

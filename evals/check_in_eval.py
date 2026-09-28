@@ -8,6 +8,8 @@ checks the SRS rules that can only be verified on actual output:
   FR-AIR-009  asking to stop → session closes
   FR-AIR-010/011  closing messages contain no question
   FR-AIR-014/015  capture prompts request the right value, briefly
+  FR-JRN-003  the extended free write: short replies, no replaying her message,
+              a quiet shift is noticed, and the session tapers instead of stopping
 
 Usage (from emotional-support-backend/, with OPENAI_API_KEY in .env):
     python -m evals.check_in_eval
@@ -105,7 +107,17 @@ def run_capture_checks() -> list[str]:
                 failures.append(f"capture {spec['id']}: more than one question: {text!r}")
             if len(text.split()) > 40:
                 failures.append(f"capture {spec['id']}: too long ({len(text.split())} words)")
-        value = {"mood": 2, "triggers": ["workload"], "trigger_note": "busy day", "thinking_traps": [], "feelings": ["tired"]}[spec["id"]]
+            # A scale prompt may name its range, but only the real one (FR-INS-009
+            # added a 0-10 value next to the 1-5 mood scale, and the model guessed).
+            if spec["control"] == "scale":
+                options = capture.SCALES[spec["scale"]]
+                low, high = options[0]["value"], options[-1]["value"]
+                wrong_low = 1 if low == 0 else 0
+                said = text.lower()
+                if any(f"{wrong_low} {word} {high}" in said for word in ("to", "se")) or f"{wrong_low}-{high}" in said:
+                    failures.append(f"capture {spec['id']}: states the wrong range for a {low}-{high} scale: {text!r}")
+        value = {"mood": 2, "triggers": ["workload"], "trigger_note": "busy day", "thinking_traps": [],
+                 "feelings": ["tired"], "feeling_intensity": 7}[spec["id"]]
         recorded[spec["id"]] = value or None
         previous = f"{spec['id']} = {capture.display_text(spec, value or None)}"
     return failures
@@ -195,6 +207,76 @@ def run_savouring_checks() -> list[str]:
     return failures
 
 
+# One extended free-write session, run turn by turn the way the router runs it.
+FREE_WRITE_ENTRY = (
+    "aaj phir wohi din tha. subah se sab theek chal raha tha phir ammi ka phone aaya aur shaadi ki "
+    "baat pe behes ho gayi. mujhe samajh nahi aata main hi hamesha ghalat kyun hoti hoon. gaari mein "
+    "bees minute baith kar roti rahi phir office chali gayi jaise kuch hua hi nahi."
+)
+FREE_WRITE_TURNS = [
+    "pata nahi shayad main over-react karti hoon",
+    # Several messages sent before Echo replies, as the app allows.
+    "unhon ne kaha main khud-gharz hoon\n\nki main sirf apni sochti hoon\n\naur ye ke unhon ne meri khatir sab qurban kiya",
+    # A quiet shift: she reads the other side. This must set shift_noticed.
+    "shayad wo bhi dari hoi hain ke main door chali jaungi",
+    "haan ab thora halka lag raha hai",
+]
+# A reply longer than this is summarising rather than reflecting.
+FREE_WRITE_MAX_WORDS = 55
+
+
+def run_free_write_checks() -> list[str]:
+    """FR-JRN-003 with FR-AIR-003/009/011: the extended session, end to end."""
+    failures: list[str] = []
+    limits = capture.conversation_limits("free_write")
+    summary = f"- account: <user_text>{FREE_WRITE_ENTRY}</user_text>"
+    history: list[tuple[str, str]] = []
+    stage = None
+    shift_turn = closed_turn = None
+
+    for index, text in enumerate([None] + FREE_WRITE_TURNS):
+        close_reason = enforcement.required_closure(
+            history, text, limits["containment_turns"], stage, minimal_replies=limits["minimal_replies"]
+        )
+        prompt = context_builder.build_system_prompt(
+            ACCOUNT, FOCUS, ["relationship_issues"], "free_write", summary,
+            close_reason=close_reason, reply_language=language.ROMAN_URDU,
+            repeat_limit=limits["repeat_limit"],
+        )
+        outcome = enforcement.enforce(
+            llm_client.generate_reflection(prompt, history, text),
+            forced_closure=close_reason, repeat_limit=limits["repeat_limit"],
+        )
+        stage = enforcement.CONFIRMING if outcome.shift_noticed else enforcement.EXPLORING
+        reply = outcome.reply_text
+
+        if enforcement.count_questions(reply) > 1:
+            failures.append(f"free write turn {index}: more than one question: {reply!r}")
+        if len(reply.split()) > FREE_WRITE_MAX_WORDS:
+            failures.append(f"free write turn {index}: {len(reply.split())} words — summarising: {reply!r}")
+        if language.TUM_WORDS.search(reply):
+            failures.append(f"free write turn {index} uses 'tum': {reply!r}")
+        if outcome.shift_noticed and shift_turn is None:
+            shift_turn = index
+        if outcome.session_end and closed_turn is None:
+            closed_turn = index
+            if enforcement.count_questions(reply):
+                failures.append(f"free write closing has a question: {reply!r}")
+            break
+
+        if text is not None:
+            history.append(("user", text))
+        history.append(("ai", reply))
+
+    if shift_turn is None:
+        failures.append("free write: her change of view was never noticed (shift_noticed stayed false)")
+    if closed_turn is None:
+        failures.append("free write: the session never closed, even after she said she felt lighter")
+    elif shift_turn is not None and closed_turn <= shift_turn:
+        failures.append(f"free write: closed on the shift turn ({closed_turn}) instead of tapering")
+    return failures
+
+
 def main() -> None:
     mode = "MOCK (harness dry-run)" if settings.LLM_MOCK else f"{settings.OPENAI_RESPONSE_MODEL} / {settings.OPENAI_CLASSIFIER_MODEL}"
     print(f"Check-in eval — {mode}\n")
@@ -208,6 +290,15 @@ def main() -> None:
 
     fails = run_savouring_checks()
     print(f"[{'PASS' if not fails else 'FAIL'}] savouring closing messages")
+    for f in fails:
+        print("    -", f)
+    total_fail += len(fails)
+
+    try:
+        fails = run_free_write_checks()
+    except llm_client.LLMError as exc:
+        fails = [f"model call failed: {exc}"]
+    print(f"[{'PASS' if not fails else 'FAIL'}] extended free-write session")
     for f in fails:
         print("    -", f)
     total_fail += len(fails)

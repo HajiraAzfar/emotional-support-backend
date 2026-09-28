@@ -6,7 +6,12 @@ from app.core.llm_client import Reflection
 
 logger = logging.getLogger(__name__)
 
-REPEAT_LIMIT = 3  # FR-AIR-009: the same concern restated three times closes the session
+# FR-AIR-009: how many times the same concern may be restated before the session
+# closes, and how many minimal replies in a row count as disengagement. These are
+# the defaults; a journal type can set its own in content/conversation.json,
+# because an extended free write is meant to circle and to pause.
+REPEAT_LIMIT = 3
+MINIMAL_REPLIES = 2
 # Conversation stages: exploring what she is stuck in, then one consolidating
 # turn after she moves, then the closing message.
 EXPLORING, CONFIRMING = "exploring", "confirming"
@@ -42,11 +47,12 @@ def required_closure(
     text: str | None,
     containment_turns: int,
     stage: str | None = None,
+    minimal_replies: int = MINIMAL_REPLIES,
 ) -> str | None:
     """
     Closure conditions the code can detect with certainty, checked before the
     reply is generated so the model writes a proper closing message:
-    - minimal_replies: the latest two user replies are minimal (FR-AIR-004/009)
+    - minimal_replies: her last `minimal_replies` replies are minimal (FR-AIR-004/009)
     - revised_appraisal: she moved last turn and Echo consolidated it, so this
       reply is the closing one — the conversation tapers instead of stopping dead
     - containment: the invisible length failsafe (FR-AIR-013)
@@ -54,13 +60,35 @@ def required_closure(
     user_turns = [content for role, content in history if role == "user"]
     if text is not None:
         user_turns.append(text)
-    if len(user_turns) >= 2 and all(is_minimal(t) for t in user_turns[-2:]):
+    if len(user_turns) >= minimal_replies and all(is_minimal(t) for t in user_turns[-minimal_replies:]):
         return "minimal_replies"
     if stage == CONFIRMING:
         return "revised_appraisal"
     if sum(1 for role, _ in history if role == "ai") >= containment_turns:
         return "containment"
     return None
+
+
+# Openers that hand her own message back to her before the reply begins. The
+# prompt asks for the thing itself instead, and the model mostly complies — this
+# removes the ones that slip through, because a reply that starts by repeating
+# her is the difference between being listened to and being processed.
+_RECAP_OPENER = re.compile(
+    r"^(aap ?ne likha|aap ?ne bataya|aap keh rahi hain|aap ne kaha|"
+    r"you wrote that|you mentioned that|you said that|you have (told|written))"
+    r"\b[^.?!]*[.?!]+\s*",
+    re.I,
+)
+# What is left has to still be a reply, not a fragment.
+_MIN_WORDS_AFTER_STRIP = 6
+
+
+def drop_recap_opener(text: str) -> str:
+    """Remove a leading restatement, keeping the reply that follows it."""
+    rest = _RECAP_OPENER.sub("", text, count=1).strip()
+    if rest == text or len(rest.split()) < _MIN_WORDS_AFTER_STRIP:
+        return text
+    return rest[0].upper() + rest[1:] if rest[0].islower() else rest
 
 
 def count_questions(text: str) -> int:
@@ -91,7 +119,11 @@ def limit_questions(text: str, allowed: int) -> str:
     return result or text
 
 
-def enforce(reflection: Reflection, forced_closure: str | None = None) -> Outcome:
+def enforce(
+    reflection: Reflection,
+    forced_closure: str | None = None,
+    repeat_limit: int = REPEAT_LIMIT,
+) -> Outcome:
     """
     Runs last and overrides the model. The model can only raise flags, never
     clear them. When it notices risk, the caller replaces its reply with fixed
@@ -110,7 +142,7 @@ def enforce(reflection: Reflection, forced_closure: str | None = None) -> Outcom
 
     if not crisis and forced_closure:
         session_end, reason = True, forced_closure
-    elif not crisis and not session_end and not shift and reflection.same_concern_count >= REPEAT_LIMIT:
+    elif not crisis and not session_end and not shift and reflection.same_concern_count >= repeat_limit:
         # The model counted the loop but did not close; a reply that keeps asking would feed it.
         session_end, reason = True, "repeated_concern"
 
@@ -119,6 +151,10 @@ def enforce(reflection: Reflection, forced_closure: str | None = None) -> Outcom
 
     text = reflection.response_text.strip() or "I'm here. Tell me a bit more?"
     text = limit_questions(text, allowed=0 if session_end else 1)
+    if not session_end:
+        # A closing message is allowed to restate what she reached (FR-AIR-011);
+        # an ordinary reply is not allowed to open by replaying her.
+        text = drop_recap_opener(text)
     if session_end and count_questions(text):
         logger.warning("Closing message still contains a question")
 

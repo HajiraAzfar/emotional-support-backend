@@ -27,6 +27,11 @@ so do not list options or explain how to answer.
 - `trigger_note` — an optional few words about it, in their own words.
 - `thinking_traps` — any unhelpful thinking patterns they noticed (the app shows a list).
 - `feelings` — which specific feelings are present (the app shows a list).
+- `feeling_intensity` — how strongly those feelings are felt, on a 0–10 scale where
+  0 is barely there and 10 is as strong as it gets. Only ever asked after she has
+  named feelings, so refer to those feelings, not to a new one. Never call a number
+  high, low, good or bad — it is information, not a score. If you mention the range
+  at all, it is 0 to 10.
 - `account` — whatever they want to write, open-ended.
 - `name` — a short name for this entry, in her words (thought journal).
 - `situation` — what was happening when the thought showed up (thought journal).

@@ -36,6 +36,8 @@ LIBRARIES: dict[str, dict] = {
 }
 SCALES: dict[str, list[dict]] = _read(_CONTENT_DIR / "scales.json")
 FALLBACKS: dict = _read(_CONTENT_DIR / "capture_fallbacks.json")
+# How long a conversation may run, per journal type (FR-AIR-009, FR-AIR-013).
+CONVERSATION: dict = _read(_CONTENT_DIR / "conversation.json")
 
 # FR-JRN-007: a fixed notice shown before the first value, for users with the
 # past-event focus area. The schedule names which notice; the text is content.
@@ -65,12 +67,30 @@ def _check_content() -> None:
                 raise RuntimeError(f"{journal_type}.{spec['id']}: unknown scale {spec['scale']}")
             if spec["id"] not in FALLBACKS.get(journal_type, {}):
                 raise RuntimeError(f"{journal_type}.{spec['id']}: no fallback wording")
+            if spec.get("pause_after") and spec is values[-1]:
+                raise RuntimeError(f"{journal_type}.{spec['id']}: pauses after the last value")
+            # A dependency must come earlier, or it could never be answered in time.
+            depends_on = spec.get("depends_on")
+            if depends_on is not None:
+                earlier = [v["id"] for v in values[:values.index(spec)]]
+                if depends_on not in earlier:
+                    raise RuntimeError(
+                        f"{journal_type}.{spec['id']}: depends_on {depends_on} does not come before it"
+                    )
         if ENDINGS[journal_type] == "close" and f"{journal_type}_close" not in FALLBACKS:
             raise RuntimeError(f"{journal_type}: no fallback closing message")
         variant = VARIANTS.get(journal_type, {})
         unknown = (set(variant.get("omit", [])) | set(variant.get("optional", []))) - {v["id"] for v in values}
         if unknown:
             raise RuntimeError(f"{journal_type} variant names values that do not exist: {sorted(unknown)}")
+
+    for name in CONVERSATION:
+        if name.startswith("_") or name == "default":
+            continue
+        if name not in SCHEDULES:
+            raise RuntimeError(f"conversation.json: {name} is not a journal type")
+        if set(CONVERSATION[name]) - set(CONVERSATION["default"]) - {"_comment"}:
+            raise RuntimeError(f"conversation.json: {name} sets a limit that does not exist")
 
 
 _check_content()
@@ -113,6 +133,16 @@ def library_for_user(name: str, focus_codes: list[str], user_terms: list[dict], 
     if user_terms:
         categories = [{"id": "my_words", "name": "My words", "items": user_terms}] + categories
     return {**lib, "categories": categories, "extendable": name in EXTENDABLE_LIBRARIES}
+
+
+def conversation_limits(journal_type: str) -> dict:
+    """
+    When a conversation must close, for this journal (FR-AIR-009, FR-AIR-013).
+    A journal with nothing of its own gets the default; free write runs longer
+    because being heard, not resolving something, is the point of it.
+    """
+    limits = {**CONVERSATION["default"], **CONVERSATION.get(journal_type, {})}
+    return {k: limits[k] for k in ("repeat_limit", "minimal_replies", "containment_turns")}
 
 
 def has_schedule(journal_type: str) -> bool:
@@ -163,6 +193,19 @@ def notice_for(journal_type: str, focus_codes: list[str] | None) -> str | None:
     return NOTICE_TEXTS[notice]
 
 
+def pauses_after(spec: dict) -> bool:
+    """
+    FR-JRN-006: the plan is made now, and what happened comes hours or days
+    later. The entry stops after this value and waits for her, rather than
+    asking how something went that has not happened yet.
+    """
+    return bool(spec.get("pause_after"))
+
+
+def pause_message() -> str:
+    return NOTICE_TEXTS["pause"]
+
+
 def carried_values(journal_type: str) -> list[str]:
     """Values a further cycle reuses from the cycle it continues (FR-JRN-006)."""
     return ["feared_outcome"] if journal_type == "exposure" else []
@@ -172,11 +215,37 @@ def grounding_message() -> str:
     return GROUNDING["message"]
 
 
-def next_value(values: list[dict], recorded: set[str]) -> dict | None:
+def _asked(spec: dict, recorded: dict[str, Any]) -> bool:
+    """
+    Whether this value is worth asking. A value with depends_on follows up on
+    another one, so it is only asked when that one was actually answered —
+    "how strong was it?" makes no sense after she skipped the feelings.
+    """
+    depends_on = spec.get("depends_on")
+    if depends_on is None:
+        return True
+    answer = recorded.get(depends_on)
+    return answer is not None and answer != [] and answer != ""
+
+
+def next_value(values: list[dict], recorded: dict[str, Any]) -> dict | None:
     """The first value in the schedule without a response or skip (FR-ENT-024)."""
     for spec in values:
-        if spec["id"] not in recorded:
+        if spec["id"] not in recorded and _asked(spec, recorded):
             return spec
+    return None
+
+
+def scale_bounds(value_id: str) -> tuple[int, int] | None:
+    """
+    The lowest and highest a value can be recorded as, read from the schedule
+    that records it — so a chart never hardcodes the ends of a scale.
+    """
+    for values in SCHEDULES.values():
+        for spec in values:
+            if spec["id"] == value_id and spec["control"] == "scale":
+                points = [option["value"] for option in SCALES[spec["scale"]]]
+                return min(points), max(points)
     return None
 
 

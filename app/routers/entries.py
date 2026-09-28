@@ -147,6 +147,27 @@ def _open_value(db: Session, entry: Entry, account: Account) -> dict | None:
     return spec if last is not None and last.kind == "capture_answer" and last.value_id == spec["id"] else None
 
 
+def _paused(db: Session, entry: Entry) -> bool:
+    """
+    FR-JRN-006: she made a plan and the entry stopped there. It stays stopped
+    until she comes back and says she has done it — asking "how did it go?"
+    about something that has not happened yet is worse than asking nothing.
+    """
+    if entry.status != "in_progress":
+        return False
+    last = db.query(Message).filter(Message.entry_id == entry.id).order_by(Message.sequence.desc()).first()
+    return last is not None and last.kind == "pause"
+
+
+def _pause_due(values: list[dict], recorded: dict, spec: dict | None) -> bool:
+    """True when the value she just answered is the one the schedule pauses after."""
+    if spec is None:
+        return False
+    index = next((i for i, v in enumerate(values) if v["id"] == spec["id"]), 0)
+    previous = values[index - 1] if index else None
+    return bool(previous and capture.pauses_after(previous) and previous["id"] in recorded)
+
+
 def _journal_type(entry: Entry) -> str:
     return context_builder.normalise_journal_type(entry.journal_type)
 
@@ -156,9 +177,11 @@ def _state(db: Session, entry: Entry, account: Account, crisis_event: crisis.Cri
     # FR-JRN-007: no value is requested until the scope notice is acknowledged.
     notice = capture.notice_for(_journal_type(entry), _focus_codes(db, account))
     pending_notice = notice if notice and not entry.notice_acknowledged else None
-    if entry.status == "in_progress" and not pending_notice:
+    # FR-JRN-006: nor while the entry is waiting for her to go and do it.
+    pending_resume = _paused(db, entry)
+    if entry.status == "in_progress" and not pending_notice and not pending_resume:
         spec = _open_value(db, entry, account) or capture.next_value(
-            _values(db, entry, account), set(_recorded(db, entry))
+            _values(db, entry, account), _recorded(db, entry)
         )
         if spec:
             next_capture = capture.spec_out(spec)
@@ -168,12 +191,13 @@ def _state(db: Session, entry: Entry, account: Account, crisis_event: crisis.Cri
         support_note = crisis.mild_reference()
 
     out = EntryOut.model_validate(entry, from_attributes=True).model_dump(
-        exclude={"messages", "next_capture", "support_note", "pending_notice"}
+        exclude={"messages", "next_capture", "support_note", "pending_notice", "pending_resume"}
     )
     return EntryStepOut(
         **out,
         support_note=support_note,
         pending_notice=pending_notice,
+        pending_resume=pending_resume,
         next_capture=next_capture,
         messages=_messages(db, entry),
         crisis_event=crisis_event.as_dict() if crisis_event else None,
@@ -206,7 +230,7 @@ def _screen(
     return result, classification
 
 
-def _ask_next(db: Session, entry: Entry, account: Account, previous_answer: str | None) -> None:
+def _ask_next(db: Session, entry: Entry, account: Account, previous_answer: str | None, resuming: bool = False) -> None:
     """
     Adds the next capture prompt, or — when every value is recorded — completes
     the entry and adds the conversation offer.
@@ -215,7 +239,7 @@ def _ask_next(db: Session, entry: Entry, account: Account, previous_answer: str 
     focus_codes = _focus_codes(db, account)
     values = capture.values_for(journal_type, focus_codes)
     recorded = _recorded(db, entry)
-    spec = capture.next_value(values, set(recorded))
+    spec = capture.next_value(values, recorded)
 
     if spec is None:
         # FR-ENT-020: complete on the final capture, independent of the conversation.
@@ -239,6 +263,11 @@ def _ask_next(db: Session, entry: Entry, account: Account, previous_answer: str 
                 entry.conversation_status = "offered"
                 _add_message(db, entry, "ai", "offer", capture.FALLBACKS["offer"])
         _maybe_ground(db, entry, journal_type, focus_codes)
+        return
+
+    if not resuming and _pause_due(values, recorded, spec):
+        # FR-JRN-006: the rest of this entry belongs to after she has done it.
+        _add_message(db, entry, "ai", "pause", capture.pause_message())
         return
 
     result = None
@@ -321,8 +350,15 @@ def _reflect(
     domains = domains or entry.domains or ["general"]
     entry.domains = domains
 
+    # FR-AIR-009/013: how long this journal's conversation may run. Free write is
+    # an extended session, so it circles and pauses further before closing.
+    limits = capture.conversation_limits(journal_type)
     close_reason = enforcement.required_closure(
-        history, text, settings.CONVERSATION_CONTAINMENT_TURNS, entry.conversation_stage
+        history,
+        text,
+        limits["containment_turns"] or settings.CONVERSATION_CONTAINMENT_TURNS,
+        entry.conversation_stage,
+        minimal_replies=limits["minimal_replies"],
     )
     system_prompt = context_builder.build_system_prompt(
         account,
@@ -332,9 +368,10 @@ def _reflect(
         summary,
         close_reason=close_reason,
         reply_language=language.reply_language(user_texts),
+        repeat_limit=limits["repeat_limit"],
     )
     reflection = llm_client.generate_reflection(system_prompt, history, text)
-    outcome = enforcement.enforce(reflection, forced_closure=close_reason)
+    outcome = enforcement.enforce(reflection, forced_closure=close_reason, repeat_limit=limits["repeat_limit"])
     # One consolidating turn after she moves, then the closing message.
     entry.conversation_stage = enforcement.CONFIRMING if outcome.shift_noticed else enforcement.EXPLORING
     return outcome
@@ -491,6 +528,25 @@ def create_entry(
     return _state(db, entry, account)
 
 
+@router.post("/{entry_id}/resume", response_model=EntryStepOut)
+def resume_entry(
+    entry_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_user),
+):
+    """
+    FR-JRN-006: she has done the thing she planned and is back to record how it
+    went. Until she says so, the entry asks nothing — it may be hours or days.
+    """
+    entry = _get_entry(db, entry_id, account)
+    if not _paused(db, entry):
+        raise HTTPException(status_code=409, detail="This entry is not waiting to be resumed")
+    _ask_next(db, entry, account, previous_answer=None, resuming=True)
+    db.commit()
+    db.refresh(entry)
+    return _state(db, entry, account)
+
+
 @router.post("/{entry_id}/acknowledge", response_model=EntryStepOut)
 def acknowledge_notice(
     entry_id: uuid.UUID,
@@ -549,12 +605,15 @@ def submit_capture(
     # FR-JRN-007: nothing is collected until the scope notice is acknowledged.
     if capture.notice_for(journal_type, _focus_codes(db, account)) and not entry.notice_acknowledged:
         raise HTTPException(status_code=409, detail="The notice must be acknowledged first")
+    # FR-JRN-006: nor while the entry waits for her to go and do what she planned.
+    if _paused(db, entry):
+        raise HTTPException(status_code=409, detail="This entry is waiting until you have done it")
 
     # FR-ENT-024: only the next unrecorded value can be answered, exactly once.
     # A repeatable value (free write) stays open across several messages, so it
     # is "unrecorded" until she says she is done.
     open_value = _open_value(db, entry, account)
-    spec = open_value or capture.next_value(_values(db, entry, account), set(_recorded(db, entry)))
+    spec = open_value or capture.next_value(_values(db, entry, account), _recorded(db, entry))
     if spec is None or spec["id"] != payload.value_id:
         raise HTTPException(status_code=409, detail=f"Expected value: {spec['id'] if spec else 'none'}")
 
@@ -685,6 +744,14 @@ def add_message(
         db.commit()
         db.refresh(entry)
         return _state(db, entry, account, crisis_event=event, referral=True)
+
+    if payload.more:
+        # FR-JRN-003 in the conversation: she is still writing. The message is
+        # stored and screened; Echo waits and answers all of it at once, because
+        # interrupting someone mid-thought is the opposite of listening.
+        db.commit()
+        db.refresh(entry)
+        return _state(db, entry, account, crisis_event=event)
 
     try:
         outcome = _reflect(db, entry, account, history, text, classification.domains)

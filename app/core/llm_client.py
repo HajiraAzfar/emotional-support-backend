@@ -255,9 +255,10 @@ def generate_reflection(
     items = _as_input(history[-RESPONSE_HISTORY:], text)
     if not items:
         items = [{"role": "user", "content": "(I've finished my entry and chose to talk it through.)"}]
-    # An empty or unparsable reply is occasionally transient; one quiet retry
-    # spares the user the "couldn't reply" notice.
-    for attempt in range(2):
+    # The model sometimes files a perfectly ordinary reply as a "refusal" content
+    # part, which leaves output_parsed empty; measured at roughly one call in ten.
+    # It is transient, so quiet retries spare the user the "couldn't reply" notice.
+    for attempt in range(3):
         try:
             response = _get_client().responses.parse(
                 model=settings.OPENAI_RESPONSE_MODEL,

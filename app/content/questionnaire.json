@@ -1,0 +1,21 @@
+{
+  "version": "0-generic",
+  "status": "GENERIC PLACEHOLDER — the instrument, its items and its scoring must be chosen and approved by the Clinical Advisor before release (FR-INS-017). Nothing here is a validated measure.",
+  "_comment": "FR-INS-018/019: the score is stored but never shown to the user, and the trend is drawn without numbers, severity bands or the name of any condition.",
+  "title": "A few questions about the last two weeks",
+  "intro": "Five quick questions. There are no right answers, and you will not be given a score — this only helps you see how things move over time.",
+  "offer_every_days": 14,
+  "scale": [
+    {"value": 0, "label": "Not at all"},
+    {"value": 1, "label": "A few days"},
+    {"value": 2, "label": "More than half the days"},
+    {"value": 3, "label": "Nearly every day"}
+  ],
+  "items": [
+    {"id": "q1", "text": "Over the last two weeks, how often have you felt low or down?"},
+    {"id": "q2", "text": "How often have things you usually enjoy felt flat?"},
+    {"id": "q3", "text": "How often have you felt on edge or unable to settle?"},
+    {"id": "q4", "text": "How often has sleep been difficult?"},
+    {"id": "q5", "text": "How often has it been hard to get through the day?"}
+  ]
+}

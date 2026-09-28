@@ -8,3 +8,5 @@ from app.models.message import Message
 from app.models.captured_value import CapturedValue
 from app.models.crisis_event import CrisisEvent
 from app.models.user_term import UserTerm
+from app.models.questionnaire_response import QuestionnaireResponse
+from app.models.library_favourite import LibraryFavourite

@@ -58,6 +58,9 @@ class EntryOut(BaseModel):
     crisis_tier: str | None = None
     # FR-JRN-007: shown before the first value; the client must acknowledge it.
     pending_notice: str | None = None
+    # FR-JRN-006: the entry is waiting for her to go and do the thing she planned.
+    # No value is requested until she says she is back.
+    pending_resume: bool = False
     parent_entry_id: uuid.UUID | None = None
     # FR-CRIS-005: resource reference shown at the end of a completed mild-tier entry.
     support_note: str | None = None
