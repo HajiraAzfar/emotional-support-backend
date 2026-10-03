@@ -333,25 +333,34 @@ which on FastAPI Cloud shows up only as a deployment stuck on "Verifying
 Readiness".
 
 `DATABASE_URL`, `JWT_SECRET` and `RESEND_API_KEY` have no defaults, so the app
-will not start without them. Set them on the host, never in the repository:
+will not start without them, and `.env` is never uploaded. Eight settings belong
+on the host, never in the repository:
 
-```bash
-fastapi cloud env set --secret DATABASE_URL     # prompts; value stays off-screen
-fastapi cloud env set --secret JWT_SECRET
-fastapi cloud env set --secret RESEND_API_KEY
-fastapi cloud env set --secret OPENAI_API_KEY
-fastapi cloud env set --secret OPENAI_BASE_URL
-fastapi cloud env set OPENAI_CLASSIFIER_MODEL gpt-4.1-mini
-fastapi cloud env set OPENAI_RESPONSE_MODEL gpt-4.1-mini
-fastapi cloud env set APP_BASE_URL https://<the-deployed-address>
-fastapi cloud env list
-```
+| Key | Secret | Value |
+| --- | --- | --- |
+| `DATABASE_URL` | yes | the Supabase pooler URL |
+| `JWT_SECRET` | yes | — |
+| `RESEND_API_KEY` | yes | — |
+| `OPENAI_API_KEY` | yes | — |
+| `OPENAI_BASE_URL` | yes | the Azure resource's `/openai/v1/` endpoint |
+| `OPENAI_CLASSIFIER_MODEL` | no | `gpt-4.1-mini` |
+| `OPENAI_RESPONSE_MODEL` | no | `gpt-4.1-mini` |
+| `APP_BASE_URL` | no | the deployed address, used in email links |
 
-Setting a variable does not trigger a redeploy — it applies to the next one, so
-set them before `fastapi deploy`.
+`LOG_VERIFICATION_CODES` must never be set on a host; its default `false` is
+what keeps login codes out of logs.
 
-Migrations are not run by the platform; run `alembic upgrade head` against the
-same database from a machine that has it configured.
+The app on FastAPI Cloud is connected to this GitHub repository, so a push is a
+deploy and the settings above are entered in the dashboard. The CLI is an
+alternative rather than a requirement: after `fastapi cloud login` and
+`fastapi cloud link`, `fastapi cloud logs` streams logs and
+`fastapi cloud env set --secret NAME --value-stdin` sets a variable without
+putting its value on the command line. That command redeploys by default; pass
+`--no-redeploy` to batch several changes.
+
+Migrations are not run by the platform. The database is the same Supabase
+instance used locally, so `alembic upgrade head` is run from a machine that has
+it configured.
 
 `render.yaml` is kept for a Render deployment, where `preDeployCommand` does run
 migrations. It is unused at present.
