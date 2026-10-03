@@ -1,0 +1,44 @@
+# Render blueprint for the mindDoc backend.
+#
+# Secrets are NOT here: DATABASE_URL, JWT_SECRET, RESEND_API_KEY and
+# OPENAI_API_KEY are marked sync:false, which makes Render ask for them in the
+# dashboard instead. Nothing secret belongs in a file that is committed.
+services:
+  - type: web
+    name: minddoc-api
+    runtime: python
+    plan: free
+    region: singapore
+    # The database is Supabase in ap-south-1, so the nearest region keeps the
+    # round trip short.
+    buildCommand: pip install -r requirements.txt
+    # Migrations run before the new version starts taking traffic.
+    preDeployCommand: alembic upgrade head
+    startCommand: uvicorn app.main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.13.1"
+      # --- set these in the Render dashboard ---
+      - key: DATABASE_URL
+        sync: false
+      - key: JWT_SECRET
+        sync: false
+      - key: RESEND_API_KEY
+        sync: false
+      - key: OPENAI_API_KEY
+        sync: false
+      - key: OPENAI_BASE_URL
+        sync: false
+      # --- safe to keep here ---
+      - key: OPENAI_CLASSIFIER_MODEL
+        value: gpt-4.1-mini
+      - key: OPENAI_RESPONSE_MODEL
+        value: gpt-4.1-mini
+      - key: CONSENT_VERSION
+        value: v1
+      - key: ELEVATED_DISTRESS_THRESHOLD
+        value: "9"
+      # Never on a server: it would write login codes into the logs.
+      - key: LOG_VERIFICATION_CODES
+        value: "false"

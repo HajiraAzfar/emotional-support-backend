@@ -56,7 +56,9 @@ def create_code(db: Session, account_id, purpose: str, minutes: int) -> str:
     db.add(record)
     db.commit()
 
-    print(f"[DEBUG] Code for account {account_id} ({purpose}): {code}")  # TEMPORARY — remove before production
+    if settings.LOG_VERIFICATION_CODES:
+        # Local development only — see the setting's comment.
+        print(f"[dev] Code for account {account_id} ({purpose}): {code}")
 
     return code
 

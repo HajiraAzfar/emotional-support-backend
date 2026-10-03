@@ -21,6 +21,10 @@ class Settings(BaseSettings):
     OPENAI_TIMEOUT_SECONDS: float = 30.0
     # true → no OpenAI calls; fixed placeholder replies so the app can be tested without a key.
     LLM_MOCK: bool = False
+    # Prints each verification code to the console. Only for local development,
+    # where Resend will not deliver to anyone but the account owner: on a server
+    # it would write login codes into logs that are kept.
+    LOG_VERIFICATION_CODES: bool = False
     # FR-AIR-013: after this many Echo replies in one conversation, the next reply must close it.
     CONVERSATION_CONTAINMENT_TURNS: int = 30
 
