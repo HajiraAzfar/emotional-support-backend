@@ -315,10 +315,46 @@ alembic downgrade -1
 
 ## Testing
 
-- **Flow suite:** `flow_test.py` (in the working scratchpad) — 228 checks over the whole engine against an in-memory SQLite database.
+- **Flow suite:** `flow_test.py` at the repository root — 228 checks over the whole engine against an in-memory SQLite database. Run it with `python flow_test.py`; it touches nothing outside its own in-memory database.
 - **Postman:** `postman/echo-check-in.postman_collection.json` — 100 requests, 216 assertions, each with a saved example response from a real run. Set `seedEmail` and `seedPassword`, then run the folders in order. Folder 05 creates crisis detection records, so use a test account.
 - **Model behaviour:** `python -m evals.check_in_eval` runs the real prompts against the configured model and checks the rules that only show up in real output — one question per reply, no question in a closing message, the reply language, "aap" rather than "tum", and closure at the right turn. **Rerun it after any change to a prompt, skill, or clinical file.**
 - There is no automated test suite in CI yet.
+
+---
+
+## Deployment
+
+The app is served by `fastapi run app/main.py`, which is what FastAPI Cloud
+starts. That command needs `fastapi-cli`, so `requirements.txt` pins
+**`fastapi[standard]`** rather than plain `fastapi` — with plain `fastapi` the
+image builds and then dies on startup with
+`RuntimeError: To use the fastapi command, please install "fastapi[standard]"`,
+which on FastAPI Cloud shows up only as a deployment stuck on "Verifying
+Readiness".
+
+`DATABASE_URL`, `JWT_SECRET` and `RESEND_API_KEY` have no defaults, so the app
+will not start without them. Set them on the host, never in the repository:
+
+```bash
+fastapi cloud env set --secret DATABASE_URL     # prompts; value stays off-screen
+fastapi cloud env set --secret JWT_SECRET
+fastapi cloud env set --secret RESEND_API_KEY
+fastapi cloud env set --secret OPENAI_API_KEY
+fastapi cloud env set --secret OPENAI_BASE_URL
+fastapi cloud env set OPENAI_CLASSIFIER_MODEL gpt-4.1-mini
+fastapi cloud env set OPENAI_RESPONSE_MODEL gpt-4.1-mini
+fastapi cloud env set APP_BASE_URL https://<the-deployed-address>
+fastapi cloud env list
+```
+
+Setting a variable does not trigger a redeploy — it applies to the next one, so
+set them before `fastapi deploy`.
+
+Migrations are not run by the platform; run `alembic upgrade head` against the
+same database from a machine that has it configured.
+
+`render.yaml` is kept for a Render deployment, where `preDeployCommand` does run
+migrations. It is unused at present.
 
 ---
 
@@ -345,4 +381,4 @@ Recorded in full, with reasoning, in the project development log.
 - The Supabase Data API is disabled for this project. The database is reachable only through this backend.
 - Access tokens are bearer credentials and should be treated with the same care as passwords.
 - User text is sent to the configured model provider for classification and reply generation. Crisis detection records deliberately store no text, and prompts wrap user-written values in `<user_text>` tags so they are treated as information rather than instructions.
-- ⚠️ A temporary debug print in `app/core/verification.py` logs generated codes to the server console, as a workaround for the email delivery limitation. **It must be removed before any deployment beyond local development.**
+- Verification codes are printed to the console only when `LOG_VERIFICATION_CODES` is `true`. It defaults to `false`, which is what keeps login codes out of server logs. Set it in a local `.env` if you need to read a code while the Resend sending domain is unverified; **never set it on a deployed host.**
