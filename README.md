@@ -324,13 +324,37 @@ alembic downgrade -1
 
 ## Deployment
 
-The app is served by `fastapi run app/main.py`, which is what FastAPI Cloud
-starts. That command needs `fastapi-cli`, so `requirements.txt` pins
-**`fastapi[standard]`** rather than plain `fastapi` — with plain `fastapi` the
-image builds and then dies on startup with
-`RuntimeError: To use the fastapi command, please install "fastapi[standard]"`,
-which on FastAPI Cloud shows up only as a deployment stuck on "Verifying
-Readiness".
+Live on FastAPI Cloud at
+**https://emotional-support-backend-a0039c1a.fastapicloud.dev**
+
+A push does **not** deploy. There is no GitHub Actions workflow here, so a
+deploy is run explicitly from a directory linked with `fastapi cloud link`:
+
+```bash
+fastapi deploy
+```
+
+The upload honours `.gitignore`, so `.env`, `venv/` and `__pycache__/` stay out
+of it.
+
+### Dependencies must be declared, not just installed
+
+The host serves the app with `fastapi run app/main.py` in a container built
+from `requirements.txt` alone. Anything installed in the local venv but missing
+from that file works here and fails there, after a successful build:
+
+- **`fastapi[standard]`**, not plain `fastapi` — `fastapi run` lives in
+  `fastapi-cli`, which the plain pin does not pull in. Without it the container
+  dies with `RuntimeError: To use the fastapi command...`, which FastAPI Cloud
+  surfaces only as a deployment stuck on "Verifying Readiness".
+- **`resend`** — imported by `app/core/email.py`.
+
+Both of these broke a deployment before being noticed. `numpy`, `scikit-learn`
+and `sentence-transformers` are also undeclared, but they are reached only
+through `app/core/domain_detection.py`, which nothing on the app's runtime path
+imports.
+
+### Settings
 
 `DATABASE_URL`, `JWT_SECRET` and `RESEND_API_KEY` have no defaults, so the app
 will not start without them, and `.env` is never uploaded. Eight settings belong
@@ -350,17 +374,17 @@ on the host, never in the repository:
 `LOG_VERIFICATION_CODES` must never be set on a host; its default `false` is
 what keeps login codes out of logs.
 
-The app on FastAPI Cloud is connected to this GitHub repository, so a push is a
-deploy and the settings above are entered in the dashboard. The CLI is an
-alternative rather than a requirement: after `fastapi cloud login` and
-`fastapi cloud link`, `fastapi cloud logs` streams logs and
-`fastapi cloud env set --secret NAME --value-stdin` sets a variable without
-putting its value on the command line. That command redeploys by default; pass
-`--no-redeploy` to batch several changes.
+Set them with `fastapi cloud env set NAME VALUE`, adding `--secret` for the
+five credentials. Two things to know: `--value-stdin` hangs in Windows `cmd`
+because it waits on stdin with no prompt and never sees EOF, and `env set` does
+not reliably trigger the redeploy its help text promises — check
+`fastapi cloud deployments list` and run `fastapi deploy` if nothing new
+appears.
 
-Migrations are not run by the platform. The database is the same Supabase
-instance used locally, so `alembic upgrade head` is run from a machine that has
-it configured.
+### Migrations
+
+Not run by the platform. The database is the same Supabase instance used
+locally, so `alembic upgrade head` is run from a machine that has it configured.
 
 `render.yaml` is kept for a Render deployment, where `preDeployCommand` does run
 migrations. It is unused at present.
