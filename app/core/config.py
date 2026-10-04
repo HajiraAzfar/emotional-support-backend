@@ -18,6 +18,8 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str | None = None
     OPENAI_CLASSIFIER_MODEL: str = "gpt-5.4-mini"
     OPENAI_RESPONSE_MODEL: str = "gpt-5.4-mini"
+    # Voice messages: speech to text. On Azure, the name of a transcription deployment.
+    OPENAI_TRANSCRIBE_MODEL: str = "gpt-4o-mini-transcribe"
     OPENAI_TIMEOUT_SECONDS: float = 30.0
     # true → no OpenAI calls; fixed placeholder replies so the app can be tested without a key.
     LLM_MOCK: bool = False

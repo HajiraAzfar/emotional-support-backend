@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.routers import auth, crisis, health, onboarding, entries, libraries, insights, learning 
+from app.routers import auth, crisis, health, onboarding, entries, libraries, insights, learning, voice
 app = FastAPI()
 
 app.include_router(health.router)
@@ -11,3 +11,4 @@ app.include_router(entries.router)   # yeh yahan aana chahiye, baaki routers ke 
 app.include_router(libraries.router)
 app.include_router(insights.router)
 app.include_router(learning.router)
+app.include_router(voice.router)

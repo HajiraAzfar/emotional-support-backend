@@ -217,6 +217,37 @@ def generate_closing(system_prompt: str) -> str | None:
     return text
 
 
+MAX_TRANSCRIPT_CHARS = 5000  # the most a message can hold (MessageCreate)
+
+# A hint, not an instruction the model must obey: it sets the expected languages
+# and shows the spelling she would type, so Urdu comes back in Roman Urdu like
+# her typed messages rather than in Urdu script.
+_TRANSCRIBE_PROMPT = (
+    "A personal journal entry spoken in English, Urdu, or a mix of both. "
+    "Urdu is written in Roman Urdu, in Latin letters. For example: "
+    "Aaj mera din theek nahi tha, I felt bohot anxious at work."
+)
+
+
+def transcribe(audio: bytes, filename: str) -> str:
+    """
+    Speech to text for a voice message. Returns "" when no words were heard.
+    Raises LLMError when the service is unavailable.
+    """
+    if settings.LLM_MOCK:
+        return "(Mock) This is what your voice message would say."
+    try:
+        result = _get_client().audio.transcriptions.create(
+            model=settings.OPENAI_TRANSCRIBE_MODEL,
+            file=(filename, audio),
+            prompt=_TRANSCRIBE_PROMPT,
+        )
+    except (openai.OpenAIError, LLMError) as exc:
+        logger.warning("Transcription failed: %s", type(exc).__name__)
+        raise LLMError(str(exc)) from exc
+    return result.text.strip()[:MAX_TRANSCRIPT_CHARS]
+
+
 def _mock_reflection(text: str | None) -> Reflection:
     ending = text is not None and text.strip().lower() in {"ok", "okay", "yeah", "idk", "bye", "stop"}
     if ending:
