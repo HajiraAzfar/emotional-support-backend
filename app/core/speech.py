@@ -19,7 +19,9 @@ logger = logging.getLogger(__name__)
 
 API_VERSION = "2025-10-15"
 # The service picks between these for what she said: English, or Urdu.
-LOCALES = ["en-US", "ur-PK"]
+# Fast transcription does not support ur-PK ("not yet supported"); ur-IN is
+# the same language and script, and recognises Pakistani speech fine.
+LOCALES = ["en-US", "ur-IN"]
 MAX_TRANSCRIPT_CHARS = 5000  # the most a message can hold (MessageCreate)
 
 
@@ -78,7 +80,12 @@ def transcribe(audio: bytes, filename: str) -> str:
     if response.status_code == 422 and "NoLanguageIdentified" in response.text:
         return ""
     if response.status_code != 200:
-        logger.warning("Transcription failed: HTTP %s", response.status_code)
+        # The error code only (e.g. InvalidLocale): the body never holds what she said.
+        try:
+            code = response.json().get("innerError", {}).get("code", "")
+        except ValueError:
+            code = ""
+        logger.warning("Transcription failed: HTTP %s %s", response.status_code, code)
         raise SpeechError(f"HTTP {response.status_code}")
     phrases = response.json().get("combinedPhrases") or []
     text = " ".join(p.get("text", "").strip() for p in phrases).strip()

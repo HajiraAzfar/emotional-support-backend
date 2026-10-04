@@ -217,6 +217,47 @@ def generate_closing(system_prompt: str) -> str | None:
     return text
 
 
+class Romanized(BaseModel):
+    text: str
+
+
+_ROMANIZE_INSTRUCTIONS = """You rewrite a speech-to-text transcript from Urdu script into Roman Urdu: Urdu in
+Latin letters, the way people in Pakistan type it on a phone (e.g. "aaj mera din
+bohot mushkil tha"). The speaker often mixes in English. English words that the
+recogniser wrote in Urdu script (آفس, اسٹریس, آئی جسٹ فیل) go back to normal
+English spelling (office, stress, I just feel). Where a number is clearly a
+misheard English word in an English phrase ("فیل 100 ٹائرڈ" is "feel so tired"),
+write the word.
+
+Do not translate, summarise, soften, correct grammar, or add or drop anything:
+every word she said stays, in the same order. Text already in Latin letters stays
+as it is. Return only the rewritten text."""
+
+
+def romanize(text: str) -> str | None:
+    """
+    Urdu-script transcript → Roman Urdu, so a spoken message reads like her typed
+    ones and the Roman Urdu crisis rules can read it. None when it can't be done;
+    the caller then keeps the Urdu script, which the rest of the app still handles.
+    """
+    if settings.LLM_MOCK:
+        return None
+    try:
+        response = _get_client().responses.parse(
+            model=settings.OPENAI_CLASSIFIER_MODEL,
+            instructions=_ROMANIZE_INSTRUCTIONS,
+            input=text,
+            text_format=Romanized,
+            store=False,
+        )
+    except (openai.OpenAIError, LLMError) as exc:
+        logger.warning("Romanization failed: %s", type(exc).__name__)
+        return None
+    result = response.output_parsed
+    roman = result.text.strip() if result else ""
+    return roman or None
+
+
 def _mock_reflection(text: str | None) -> Reflection:
     ending = text is not None and text.strip().lower() in {"ok", "okay", "yeah", "idk", "bye", "stop"}
     if ending:

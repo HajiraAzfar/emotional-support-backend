@@ -15,7 +15,7 @@ from pathlib import Path
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from app.core import speech
+from app.core import language, llm_client, speech
 from app.core.dependencies import get_current_user
 from app.models.account import Account
 
@@ -58,4 +58,7 @@ def transcribe(
             status_code=422,
             detail="I couldn't make out any words in that. Try again a little closer to the phone.",
         )
+    # Urdu comes back in Urdu script; she types Roman Urdu, and so do the crisis rules.
+    if language.detect(text) == language.URDU_SCRIPT:
+        text = llm_client.romanize(text) or text
     return TranscriptOut(text=text)
