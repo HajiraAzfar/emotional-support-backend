@@ -74,7 +74,7 @@ ELEVATED_DISTRESS_THRESHOLD=9
 OPENAI_BASE_URL=https://<resource>.openai.azure.com/openai/v1/
 OPENAI_CLASSIFIER_MODEL=gpt-4.1-mini
 OPENAI_RESPONSE_MODEL=gpt-4.1-mini
-OPENAI_TRANSCRIBE_MODEL=gpt-4o-mini-transcribe   # voice messages (speech to text)
+# AZURE_SPEECH_ENDPOINT=https://<resource>.cognitiveservices.azure.com   # voice messages; unset = OPENAI_BASE_URL's resource
 OPENAI_TIMEOUT_SECONDS=30
 LLM_MOCK=false                 # true → fixed placeholder replies, no API calls
 CONVERSATION_CONTAINMENT_TURNS=30
@@ -370,7 +370,7 @@ on the host, never in the repository:
 | `OPENAI_BASE_URL` | yes | the Azure resource's `/openai/v1/` endpoint |
 | `OPENAI_CLASSIFIER_MODEL` | no | `gpt-4.1-mini` |
 | `OPENAI_RESPONSE_MODEL` | no | `gpt-4.1-mini` |
-| `OPENAI_TRANSCRIBE_MODEL` | no | `gpt-4o-mini-transcribe` (voice messages) |
+| `AZURE_SPEECH_ENDPOINT` | no | voice messages; unset uses the resource in `OPENAI_BASE_URL` |
 | `APP_BASE_URL` | no | the deployed address, used in email links |
 
 `LOG_VERIFICATION_CODES` must never be set on a host; its default `false` is

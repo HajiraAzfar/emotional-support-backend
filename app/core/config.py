@@ -18,8 +18,10 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str | None = None
     OPENAI_CLASSIFIER_MODEL: str = "gpt-5.4-mini"
     OPENAI_RESPONSE_MODEL: str = "gpt-5.4-mini"
-    # Voice messages: speech to text. On Azure, the name of a transcription deployment.
-    OPENAI_TRANSCRIBE_MODEL: str = "gpt-4o-mini-transcribe"
+    # Voice messages: Azure Speech on the Foundry resource. Both may stay unset:
+    # the endpoint then comes from OPENAI_BASE_URL's resource, and the key is OPENAI_API_KEY.
+    AZURE_SPEECH_ENDPOINT: str | None = None
+    AZURE_SPEECH_KEY: str | None = None
     OPENAI_TIMEOUT_SECONDS: float = 30.0
     # true → no OpenAI calls; fixed placeholder replies so the app can be tested without a key.
     LLM_MOCK: bool = False

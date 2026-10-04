@@ -8,23 +8,23 @@ endpoints as typed text, so crisis screening and every other safeguard that
 reads text applies unchanged.
 
 The audio is never stored. It is held in memory for this one request, passed to
-the transcription model, and dropped.
+Azure Speech, and dropped.
 """
 from pathlib import Path
 
 from fastapi import APIRouter, Depends, File, HTTPException, UploadFile
 from pydantic import BaseModel
 
-from app.core import llm_client
+from app.core import speech
 from app.core.dependencies import get_current_user
 from app.models.account import Account
 
 router = APIRouter(prefix="/voice", tags=["voice"])
 
-# The app stops recording at 3 minutes; AAC mono at 64 kbps is ~1.5 MB for that.
+# The app stops recording at 3 minutes; AAC mono at 48 kbps is about 1 MB for that.
 MAX_AUDIO_BYTES = 10 * 1024 * 1024
-# The formats the transcription API accepts, which it tells apart by file name.
-AUDIO_SUFFIXES = {".m4a", ".mp4", ".mp3", ".mpeg", ".mpga", ".wav", ".webm", ".ogg", ".flac"}
+# Formats Azure fast transcription accepts; the app sends m4a (AAC).
+AUDIO_SUFFIXES = {".m4a", ".mp4", ".aac", ".mp3", ".wav", ".webm", ".ogg", ".flac"}
 
 
 class TranscriptOut(BaseModel):
@@ -47,8 +47,8 @@ def transcribe(
         raise HTTPException(status_code=422, detail="The recording was empty. Please try again.")
 
     try:
-        text = llm_client.transcribe(data, f"voice{suffix}")
-    except llm_client.LLMError:
+        text = speech.transcribe(data, f"voice{suffix}")
+    except speech.SpeechError:
         raise HTTPException(
             status_code=503,
             detail="Voice messages aren't available right now. You can type instead.",
