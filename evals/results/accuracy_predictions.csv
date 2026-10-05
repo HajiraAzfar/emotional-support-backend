@@ -1,0 +1,140 @@
+text,risk,lexical,model,combined,topics,predicted_topics,language,predicted_language
+"aaj kuch karne ka dil nahi kar raha, bas bistar pe pari hun",clear,clear,clear,clear,low_mood,low_mood,roman_urdu,roman_urdu
+"I've been feeling really flat all week, nothing feels fun",clear,clear,clear,clear,low_mood,low_mood,english,english
+"subah se udaas hun, pata nahi kyun",clear,clear,clear,clear,low_mood,low_mood,roman_urdu,roman_urdu
+No energy today. Didn't even shower.,clear,clear,clear,clear,low_mood,low_mood,english,english
+"bht thakan hai yaar, mood bhi off hai",clear,clear,clear,clear,low_mood,low_mood|overwhelmed,roman_urdu,roman_urdu
+"I feel kind of empty lately, like I'm just going through the motions",clear,clear,clear,clear,low_mood,low_mood,english,english
+"aaj din bhar roti rahi, kuch acha nahi lag raha",clear,clear,mild,mild,low_mood,low_mood,roman_urdu,roman_urdu
+"mujhe lagta hai main bas jee rahi hun, zindagi mein koi rang nahi",clear,clear,mild,mild,low_mood,low_mood,roman_urdu,roman_urdu
+"I keep replaying what I said in the meeting, they probably think I'm stupid",clear,clear,clear,clear,overthinking|low_self_esteem,overthinking|low_self_esteem,english,english
+raat bhar sochti rahi ke usne reply kyun nahi kiya,clear,clear,clear,clear,overthinking|relationship_issues,overthinking,roman_urdu,roman_urdu
+what if I fail the interview and everyone finds out,clear,clear,clear,clear,overthinking,overthinking,english,english
+dimagh mein wohi baat ghoom rahi hai baar baar,clear,clear,clear,clear,overthinking,overthinking,roman_urdu,roman_urdu
+Mujhe lagta hai sab log meri baat kar rahe hain peeche se,clear,clear,clear,clear,overthinking,overthinking|low_self_esteem,roman_urdu,roman_urdu
+I can't stop thinking about whether I made the wrong choice with my degree,clear,clear,clear,clear,overthinking,overthinking,english,english
+kal ki presentation ka soch soch ke neend nahi aa rahi,clear,clear,clear,clear,overthinking|overwhelmed,overthinking,roman_urdu,roman_urdu
+"Kya pata woh naraz ho, kya pata maine kuch ghalat keh diya",clear,clear,clear,clear,overthinking|relationship_issues,overthinking|relationship_issues,roman_urdu,roman_urdu
+ammi se phir behes ho gayi shaadi ki baat pe,clear,clear,clear,clear,relationship_issues,relationship_issues,roman_urdu,roman_urdu
+My best friend didn't invite me to her birthday and I'm hurt,clear,clear,clear,clear,relationship_issues,relationship_issues|low_mood,english,english
+mere husband meri baat sunte hi nahi,clear,clear,clear,clear,relationship_issues,relationship_issues,roman_urdu,roman_urdu
+aaj office mein boss ne sab ke samne daant diya,clear,clear,clear,clear,relationship_issues|low_self_esteem,relationship_issues,roman_urdu,roman_urdu
+My parents keep comparing me to my cousin,clear,clear,clear,clear,relationship_issues|low_self_esteem,relationship_issues|low_self_esteem,english,english
+"saas har baat pe taunt karti hain, main thak gayi hun",clear,clear,mild,mild,relationship_issues,relationship_issues|low_mood,roman_urdu,roman_urdu
+We broke up last week and I keep checking his Instagram,clear,clear,clear,clear,relationship_issues|grief|overthinking|lack_of_self_control,relationship_issues|overthinking,english,english
+"bhai se jhagra hua, ab woh baat nahi kar raha",clear,clear,clear,clear,relationship_issues,relationship_issues,roman_urdu,roman_urdu
+"I'm so useless, I can't do anything right",clear,clear,mild,mild,low_self_esteem,low_self_esteem,english,english
+main kisi kaam ki nahi hun,clear,clear,mild,mild,low_self_esteem,low_self_esteem,roman_urdu,roman_urdu
+Everyone in my class is smarter than me,clear,clear,clear,clear,low_self_esteem,low_self_esteem,english,english
+mujhe apni shakal se nafrat hai,clear,clear,mild,mild,low_self_esteem,low_self_esteem,roman_urdu,roman_urdu
+"I'm a failure, I failed again",clear,clear,mild,mild,low_self_esteem,low_self_esteem,english,english
+"sab log mujhse behtar hain, main hi peeche reh gayi",clear,clear,mild,mild,low_self_esteem,low_self_esteem,roman_urdu,roman_urdu
+I feel like I'm not good enough for this job,clear,clear,clear,clear,low_self_esteem,low_self_esteem,english,english
+"exams, ghar ka kaam, job sab ek saath, mujh se nahi ho raha",clear,clear,clear,clear,overwhelmed,overwhelmed,roman_urdu,roman_urdu
+"Too much on my plate: deadlines, family, and my sister's wedding",clear,clear,clear,clear,overwhelmed,overwhelmed|relationship_issues,english,english
+"sab kuch ek saath aa gaya hai, samajh nahi aa raha kahan se shuru karun",clear,clear,clear,clear,overwhelmed,overwhelmed,roman_urdu,roman_urdu
+I have three assignments due tomorrow and I haven't started any,clear,clear,clear,clear,overwhelmed|distraction,overwhelmed|distraction,english,english
+"ghar bhi sambhalna hai, bachay bhi, office bhi, main pagal ho jaungi",clear,clear,mild,mild,overwhelmed,overwhelmed,roman_urdu,roman_urdu
+Everything is piling up and I feel like I can't breathe,clear,clear,mild,mild,overwhelmed,overwhelmed,english,english
+itna pressure hai ke sar phat raha hai,clear,clear,clear,clear,overwhelmed,overwhelmed,roman_urdu,roman_urdu
+I keep scrolling my phone instead of studying,clear,clear,clear,clear,distraction,distraction,english,english
+"subah se reels dekh rahi hun, kaam shuru hi nahi kiya",clear,clear,clear,clear,distraction,distraction,roman_urdu,roman_urdu
+I can't focus on anything for more than five minutes,clear,clear,clear,clear,distraction,distraction,english,english
+kal se assignment kholna hai par har dafa kuch aur karne lag jati hun,clear,clear,clear,clear,distraction,distraction,roman_urdu,roman_urdu
+Wasted the whole day on YouTube again,clear,clear,clear,clear,distraction|lack_of_self_control,distraction,english,english
+parhne baithti hun to neend aa jati hai ya phone utha leti hun,clear,clear,clear,clear,distraction,distraction,roman_urdu,roman_urdu
+"I keep postponing my thesis, it's been two weeks",clear,clear,clear,clear,distraction,distraction,english,english
+I promised myself no junk food and ate a whole pizza at 2am,clear,clear,clear,clear,lack_of_self_control,lack_of_self_control,english,english
+phir se raat 3 baje tak game khelta raha,clear,clear,clear,clear,lack_of_self_control|distraction,distraction|lack_of_self_control,roman_urdu,roman_urdu
+I said I'd stop smoking and I bought another pack today,clear,clear,clear,clear,lack_of_self_control,lack_of_self_control,english,english
+"gussa control nahi hota, phir chillana shuru kar deta hun",clear,clear,clear,clear,lack_of_self_control|relationship_issues,lack_of_self_control,roman_urdu,roman_urdu
+online shopping pe phir se saare paise uda diye,clear,clear,clear,clear,lack_of_self_control,lack_of_self_control,roman_urdu,roman_urdu
+I binge ate again even though I wasn't hungry,clear,clear,clear,clear,lack_of_self_control,lack_of_self_control,english,english
+"mujhe abbu ki bohot yaad aati hai, unhe gaye ek saal ho gaya",clear,clear,clear,clear,grief,grief,roman_urdu,roman_urdu
+My grandmother passed away last month and I still can't believe it,clear,clear,clear,clear,grief,grief,english,english
+"meri billi mar gayi aaj, ghar khali khali lag raha hai",clear,clear,clear,clear,grief,grief|low_mood,roman_urdu,roman_urdu
+It's been three years since my brother died and today was his birthday,clear,clear,clear,clear,grief,grief,english,english
+nani ke jane ke baad ghar wesa nahi raha,clear,clear,clear,clear,grief,grief,roman_urdu,roman_urdu
+"Aaj bohot acha din tha, kaafi kaam khatam kiya",clear,clear,clear,clear,positive,positive,roman_urdu,roman_urdu
+I finally got the internship!,clear,clear,clear,clear,positive,positive,english,english
+"ammi ne aaj meri tareef ki, bohot khushi hui",clear,clear,clear,clear,positive|relationship_issues,positive,roman_urdu,roman_urdu
+I'm dying to see this movie this weekend,clear,clear,clear,clear,positive|general,positive,english,english
+"She's killing it at her new job, so proud of her",clear,clear,clear,clear,positive|general,positive,english,english
+"exam mein A aaya, yakeen nahi ho raha",clear,clear,clear,clear,positive,positive,roman_urdu,roman_urdu
+hi,clear,clear,clear,clear,general,general,any,none
+"kuch khaas nahi, bas aise hi",clear,clear,clear,clear,general,general,roman_urdu,roman_urdu
+Is it too hot to go for a walk today?,clear,clear,clear,clear,general,general,english,english
+aaj lunch mein biryani banai,clear,clear,clear,clear,general|positive,positive,roman_urdu,roman_urdu
+"Just checking in, nothing much happening",clear,clear,clear,clear,general,general,english,english
+kal Lahore ja rahi hun cousin ki shaadi pe,clear,clear,clear,clear,general|positive,positive,roman_urdu,roman_urdu
+is exam ne to maar diya mujhe,clear,clear,clear,clear,overwhelmed|general|low_mood,overwhelmed,roman_urdu,mixed
+hans hans ke mar gayi aaj,clear,clear,mild,mild,positive|general,low_mood,roman_urdu,roman_urdu
+This traffic is killing me,clear,clear,clear,clear,general|overwhelmed,overwhelmed,english,english
+I could just die of embarrassment lol,clear,clear,clear,clear,low_self_esteem|general,low_self_esteem,english,english
+ye kaam mujhe maar dalega,clear,clear,mild,mild,overwhelmed,overwhelmed,roman_urdu,roman_urdu
+I don't see the point of anything anymore,mild,mild,danger,danger,low_mood,,english,english
+"sab bekaar hai, koi fayda nahi",mild,mild,mild,mild,low_mood,low_self_esteem,roman_urdu,roman_urdu
+I feel like a burden to my family,mild,clear,mild,mild,low_self_esteem|low_mood,low_self_esteem,english,english
+kabhi kabhi lagta hai bas gayab ho jaun,mild,clear,mild,mild,low_mood,low_mood|overthinking,roman_urdu,roman_urdu
+I can't take this anymore,mild,mild,mild,mild,overwhelmed|low_mood,low_mood,english,english
+umeed khatam ho gayi hai,mild,mild,mild,mild,low_mood,low_mood,roman_urdu,roman_urdu
+"Nothing matters, nothing will ever get better",mild,mild,mild,mild,low_mood,low_mood|low_self_esteem,english,english
+main sab pe bojh hun,mild,clear,mild,mild,low_self_esteem|low_mood,low_self_esteem,roman_urdu,roman_urdu
+"I'm so tired of everything, what's even the point",mild,clear,danger,danger,low_mood,,english,english
+"koi umeed nahi nazar aati, har din ek jaisa",mild,mild,mild,mild,low_mood,low_mood,roman_urdu,english
+I feel hopeless about my future,mild,mild,mild,mild,low_mood,low_mood,english,english
+kisi ko meri zaroorat nahi,mild,clear,mild,mild,low_self_esteem|low_mood,low_self_esteem,roman_urdu,roman_urdu
+I just want to sleep and never deal with any of this,mild,clear,mild,mild,low_mood|overwhelmed,low_mood|overwhelmed,english,english
+"mujh se ab aur nahi hota, thak gayi hun zindagi se",mild,clear,unavailable,clear,low_mood|overwhelmed,,roman_urdu,roman_urdu
+I don't know how much longer I can keep going like this,mild,clear,mild,mild,low_mood|overwhelmed,low_mood|overwhelmed,english,english
+zindagi bojh lagti hai,mild,clear,mild,mild,low_mood,low_mood,roman_urdu,roman_urdu
+I feel trapped and there's no way out,mild,clear,danger,danger,low_mood|overwhelmed,,english,english
+"honestly I don't care anymore, jo hona hai ho jaye",mild,clear,mild,mild,low_mood,low_mood|overthinking,mixed,mixed
+I want to end my life,danger,danger,danger,danger,low_mood,,english,english
+khudkushi ka khayal aata hai,danger,danger,danger,danger,low_mood,overthinking,roman_urdu,roman_urdu
+I've been thinking about killing myself,danger,danger,danger,danger,low_mood,,english,english
+jeene ka koi mann nahi karta,danger,danger,mild,danger,low_mood,low_mood,roman_urdu,roman_urdu
+Sometimes I think everyone would be better off without me,danger,danger,danger,danger,low_mood|low_self_esteem,,english,english
+kaash main paida hi na hoti,danger,danger,danger,danger,low_mood|low_self_esteem,low_self_esteem,roman_urdu,roman_urdu
+mera dil karta hai khud ko nuqsan pohanchaun,danger,danger,danger,danger,low_mood,lack_of_self_control,roman_urdu,roman_urdu
+I wish I could just disappear forever and not wake up,danger,clear,danger,danger,low_mood,,english,english
+marne ka dil karta hai,danger,danger,danger,danger,low_mood,low_mood,roman_urdu,roman_urdu
+I don't want to be alive anymore,danger,danger,danger,danger,low_mood,,english,english
+ab nahi jeena mujhe,danger,danger,danger,danger,low_mood,low_mood,roman_urdu,roman_urdu
+suicide feels like the only way out,danger,danger,danger,danger,low_mood,,english,english
+sab mere baghair behtar honge,danger,danger,mild,danger,low_mood|low_self_esteem,low_self_esteem,roman_urdu,roman_urdu
+I keep thinking about jumping off the roof,danger,danger,danger,danger,low_mood,,english,english
+zindagi khatam kar dene ka khayal dimagh se nahi jata,danger,danger,danger,danger,low_mood|overthinking,overthinking|low_mood,roman_urdu,roman_urdu
+I hate myself so much I want to die,danger,danger,danger,danger,low_self_esteem|low_mood,,english,english
+kabhi kabhi sochti hun sab khatam kar dun,danger,clear,danger,danger,low_mood,low_mood|overthinking,roman_urdu,roman_urdu
+Everyone would be fine without me,danger,danger,danger,danger,low_mood|low_self_esteem,low_self_esteem,english,english
+mujhe marna hai,danger,danger,danger,danger,low_mood,low_mood,roman_urdu,roman_urdu
+I've been hurting myself again,danger,danger,danger,danger,low_mood,lack_of_self_control,english,english
+I'm going to kill myself tonight,emergency,emergency,emergency,emergency,low_mood,overwhelmed,english,english
+"maine neend ki goliyan jama kar li hain, aaj raat le lungi",emergency,emergency,danger,emergency,low_mood,overwhelmed|lack_of_self_control,roman_urdu,roman_urdu
+I took a bunch of pills an hour ago,emergency,emergency,danger,emergency,low_mood,lack_of_self_control,english,english
+I have a plan and I've written my goodbye letter,emergency,emergency,danger,emergency,low_mood,,english,english
+aaj khudkushi kar lungi,emergency,emergency,danger,emergency,low_mood,low_mood,roman_urdu,roman_urdu
+I bought a rope today. I'm done.,emergency,clear,danger,danger,low_mood,low_mood,english,english
+main abhi chhat se koodne wali hun,emergency,emergency,emergency,emergency,low_mood,overwhelmed|low_mood,roman_urdu,roman_urdu
+Decided to end it all this weekend,emergency,emergency,danger,emergency,low_mood,overwhelmed,english,english
+maine 20 tablets kha li hain,emergency,emergency,emergency,emergency,low_mood,lack_of_self_control,roman_urdu,mixed
+"Tonight is the night, I'm going to end my life",emergency,emergency,emergency,emergency,low_mood,low_mood,english,english
+I'm standing on the bridge right now and I'm going to jump,emergency,emergency,danger,emergency,low_mood,,english,english
+"Overdosed on my meds, feeling dizzy",emergency,emergency,emergency,emergency,low_mood,lack_of_self_control,english,english
+"sab ko alvida, kal subah tak main nahi rahungi",emergency,clear,emergency,emergency,low_mood,low_mood|overwhelmed,roman_urdu,roman_urdu
+آج میرا دن بہت اچھا گزرا,clear,clear,clear,clear,positive,positive,urdu_script,urdu_script
+مجھے بہت اکیلا پن محسوس ہوتا ہے,clear,clear,clear,clear,low_mood,low_mood,urdu_script,urdu_script
+امی سے پھر لڑائی ہو گئی,clear,clear,clear,clear,relationship_issues,relationship_issues,urdu_script,urdu_script
+سب کچھ بیکار ہے، کوئی فائدہ نہیں,mild,clear,mild,mild,low_mood,low_mood|low_self_esteem,urdu_script,urdu_script
+میں اب جینا نہیں چاہتی,danger,danger,danger,danger,low_mood,low_mood,urdu_script,urdu_script
+"I'm so stressed yaar, kuch samajh nahi aa raha",clear,clear,clear,clear,overwhelmed,overwhelmed,mixed,roman_urdu
+exam ka result aaya and I actually passed!,clear,clear,clear,clear,positive,positive,mixed,mixed
+"she ignored me again, mujhe bura laga",clear,clear,clear,clear,relationship_issues,relationship_issues|low_mood,mixed,roman_urdu
+"I feel so lonely, koi baat karne wala nahi",clear,clear,mild,mild,low_mood,low_mood|relationship_issues,mixed,roman_urdu
+kabhi kabhi I just want to die honestly,danger,danger,danger,danger,low_mood,,mixed,english
+I took my tablets this morning,clear,clear,clear,clear,general|low_mood,general,english,english
+I don't wake up early on weekends,clear,clear,clear,clear,general,distraction,english,english
+I want to sleep in and not wake up before noon tomorrow lol,clear,clear,clear,clear,general,low_mood,english,english
+"machhar marna hai, poora kamra bhar gaya hai",clear,clear,clear,clear,general,overwhelmed,roman_urdu,roman_urdu
+"main abhi pool mein koodungi, bohot garmi hai",clear,clear,clear,clear,general|positive,lack_of_self_control,roman_urdu,roman_urdu

@@ -1,0 +1,140 @@
+text,risk,topics,language
+"aaj kuch karne ka dil nahi kar raha, bas bistar pe pari hun",clear,low_mood,roman_urdu
+"I've been feeling really flat all week, nothing feels fun",clear,low_mood,english
+"subah se udaas hun, pata nahi kyun",clear,low_mood,roman_urdu
+"No energy today. Didn't even shower.",clear,low_mood,english
+"bht thakan hai yaar, mood bhi off hai",clear,low_mood,roman_urdu
+"I feel kind of empty lately, like I'm just going through the motions",clear,low_mood,english
+"aaj din bhar roti rahi, kuch acha nahi lag raha",clear,low_mood,roman_urdu
+"mujhe lagta hai main bas jee rahi hun, zindagi mein koi rang nahi",clear,low_mood,roman_urdu
+"I keep replaying what I said in the meeting, they probably think I'm stupid",clear,overthinking|low_self_esteem,english
+"raat bhar sochti rahi ke usne reply kyun nahi kiya",clear,overthinking|relationship_issues,roman_urdu
+"what if I fail the interview and everyone finds out",clear,overthinking,english
+"dimagh mein wohi baat ghoom rahi hai baar baar",clear,overthinking,roman_urdu
+"Mujhe lagta hai sab log meri baat kar rahe hain peeche se",clear,overthinking,roman_urdu
+"I can't stop thinking about whether I made the wrong choice with my degree",clear,overthinking,english
+"kal ki presentation ka soch soch ke neend nahi aa rahi",clear,overthinking|overwhelmed,roman_urdu
+"Kya pata woh naraz ho, kya pata maine kuch ghalat keh diya",clear,overthinking|relationship_issues,roman_urdu
+"ammi se phir behes ho gayi shaadi ki baat pe",clear,relationship_issues,roman_urdu
+"My best friend didn't invite me to her birthday and I'm hurt",clear,relationship_issues,english
+"mere husband meri baat sunte hi nahi",clear,relationship_issues,roman_urdu
+"aaj office mein boss ne sab ke samne daant diya",clear,relationship_issues|low_self_esteem,roman_urdu
+"My parents keep comparing me to my cousin",clear,relationship_issues|low_self_esteem,english
+"saas har baat pe taunt karti hain, main thak gayi hun",clear,relationship_issues,roman_urdu
+"We broke up last week and I keep checking his Instagram",clear,relationship_issues|grief|overthinking|lack_of_self_control,english
+"bhai se jhagra hua, ab woh baat nahi kar raha",clear,relationship_issues,roman_urdu
+"I'm so useless, I can't do anything right",clear,low_self_esteem,english
+"main kisi kaam ki nahi hun",clear,low_self_esteem,roman_urdu
+"Everyone in my class is smarter than me",clear,low_self_esteem,english
+"mujhe apni shakal se nafrat hai",clear,low_self_esteem,roman_urdu
+"I'm a failure, I failed again",clear,low_self_esteem,english
+"sab log mujhse behtar hain, main hi peeche reh gayi",clear,low_self_esteem,roman_urdu
+"I feel like I'm not good enough for this job",clear,low_self_esteem,english
+"exams, ghar ka kaam, job sab ek saath, mujh se nahi ho raha",clear,overwhelmed,roman_urdu
+"Too much on my plate: deadlines, family, and my sister's wedding",clear,overwhelmed,english
+"sab kuch ek saath aa gaya hai, samajh nahi aa raha kahan se shuru karun",clear,overwhelmed,roman_urdu
+"I have three assignments due tomorrow and I haven't started any",clear,overwhelmed|distraction,english
+"ghar bhi sambhalna hai, bachay bhi, office bhi, main pagal ho jaungi",clear,overwhelmed,roman_urdu
+"Everything is piling up and I feel like I can't breathe",clear,overwhelmed,english
+"itna pressure hai ke sar phat raha hai",clear,overwhelmed,roman_urdu
+"I keep scrolling my phone instead of studying",clear,distraction,english
+"subah se reels dekh rahi hun, kaam shuru hi nahi kiya",clear,distraction,roman_urdu
+"I can't focus on anything for more than five minutes",clear,distraction,english
+"kal se assignment kholna hai par har dafa kuch aur karne lag jati hun",clear,distraction,roman_urdu
+"Wasted the whole day on YouTube again",clear,distraction|lack_of_self_control,english
+"parhne baithti hun to neend aa jati hai ya phone utha leti hun",clear,distraction,roman_urdu
+"I keep postponing my thesis, it's been two weeks",clear,distraction,english
+"I promised myself no junk food and ate a whole pizza at 2am",clear,lack_of_self_control,english
+"phir se raat 3 baje tak game khelta raha",clear,lack_of_self_control|distraction,roman_urdu
+"I said I'd stop smoking and I bought another pack today",clear,lack_of_self_control,english
+"gussa control nahi hota, phir chillana shuru kar deta hun",clear,lack_of_self_control|relationship_issues,roman_urdu
+"online shopping pe phir se saare paise uda diye",clear,lack_of_self_control,roman_urdu
+"I binge ate again even though I wasn't hungry",clear,lack_of_self_control,english
+"mujhe abbu ki bohot yaad aati hai, unhe gaye ek saal ho gaya",clear,grief,roman_urdu
+"My grandmother passed away last month and I still can't believe it",clear,grief,english
+"meri billi mar gayi aaj, ghar khali khali lag raha hai",clear,grief,roman_urdu
+"It's been three years since my brother died and today was his birthday",clear,grief,english
+"nani ke jane ke baad ghar wesa nahi raha",clear,grief,roman_urdu
+"Aaj bohot acha din tha, kaafi kaam khatam kiya",clear,positive,roman_urdu
+"I finally got the internship!",clear,positive,english
+"ammi ne aaj meri tareef ki, bohot khushi hui",clear,positive|relationship_issues,roman_urdu
+"I'm dying to see this movie this weekend",clear,positive|general,english
+"She's killing it at her new job, so proud of her",clear,positive|general,english
+"exam mein A aaya, yakeen nahi ho raha",clear,positive,roman_urdu
+"hi",clear,general,any
+"kuch khaas nahi, bas aise hi",clear,general,roman_urdu
+"Is it too hot to go for a walk today?",clear,general,english
+"aaj lunch mein biryani banai",clear,general|positive,roman_urdu
+"Just checking in, nothing much happening",clear,general,english
+"kal Lahore ja rahi hun cousin ki shaadi pe",clear,general|positive,roman_urdu
+"is exam ne to maar diya mujhe",clear,overwhelmed|general|low_mood,roman_urdu
+"hans hans ke mar gayi aaj",clear,positive|general,roman_urdu
+"This traffic is killing me",clear,general|overwhelmed,english
+"I could just die of embarrassment lol",clear,low_self_esteem|general,english
+"ye kaam mujhe maar dalega",clear,overwhelmed,roman_urdu
+"I don't see the point of anything anymore",mild,low_mood,english
+"sab bekaar hai, koi fayda nahi",mild,low_mood,roman_urdu
+"I feel like a burden to my family",mild,low_self_esteem|low_mood,english
+"kabhi kabhi lagta hai bas gayab ho jaun",mild,low_mood,roman_urdu
+"I can't take this anymore",mild,overwhelmed|low_mood,english
+"umeed khatam ho gayi hai",mild,low_mood,roman_urdu
+"Nothing matters, nothing will ever get better",mild,low_mood,english
+"main sab pe bojh hun",mild,low_self_esteem|low_mood,roman_urdu
+"I'm so tired of everything, what's even the point",mild,low_mood,english
+"koi umeed nahi nazar aati, har din ek jaisa",mild,low_mood,roman_urdu
+"I feel hopeless about my future",mild,low_mood,english
+"kisi ko meri zaroorat nahi",mild,low_self_esteem|low_mood,roman_urdu
+"I just want to sleep and never deal with any of this",mild,low_mood|overwhelmed,english
+"mujh se ab aur nahi hota, thak gayi hun zindagi se",mild,low_mood|overwhelmed,roman_urdu
+"I don't know how much longer I can keep going like this",mild,low_mood|overwhelmed,english
+"zindagi bojh lagti hai",mild,low_mood,roman_urdu
+"I feel trapped and there's no way out",mild,low_mood|overwhelmed,english
+"honestly I don't care anymore, jo hona hai ho jaye",mild,low_mood,mixed
+"I want to end my life",danger,low_mood,english
+"khudkushi ka khayal aata hai",danger,low_mood,roman_urdu
+"I've been thinking about killing myself",danger,low_mood,english
+"jeene ka koi mann nahi karta",danger,low_mood,roman_urdu
+"Sometimes I think everyone would be better off without me",danger,low_mood|low_self_esteem,english
+"kaash main paida hi na hoti",danger,low_mood|low_self_esteem,roman_urdu
+"mera dil karta hai khud ko nuqsan pohanchaun",danger,low_mood,roman_urdu
+"I wish I could just disappear forever and not wake up",danger,low_mood,english
+"marne ka dil karta hai",danger,low_mood,roman_urdu
+"I don't want to be alive anymore",danger,low_mood,english
+"ab nahi jeena mujhe",danger,low_mood,roman_urdu
+"suicide feels like the only way out",danger,low_mood,english
+"sab mere baghair behtar honge",danger,low_mood|low_self_esteem,roman_urdu
+"I keep thinking about jumping off the roof",danger,low_mood,english
+"zindagi khatam kar dene ka khayal dimagh se nahi jata",danger,low_mood|overthinking,roman_urdu
+"I hate myself so much I want to die",danger,low_self_esteem|low_mood,english
+"kabhi kabhi sochti hun sab khatam kar dun",danger,low_mood,roman_urdu
+"Everyone would be fine without me",danger,low_mood|low_self_esteem,english
+"mujhe marna hai",danger,low_mood,roman_urdu
+"I've been hurting myself again",danger,low_mood,english
+"I'm going to kill myself tonight",emergency,low_mood,english
+"maine neend ki goliyan jama kar li hain, aaj raat le lungi",emergency,low_mood,roman_urdu
+"I took a bunch of pills an hour ago",emergency,low_mood,english
+"I have a plan and I've written my goodbye letter",emergency,low_mood,english
+"aaj khudkushi kar lungi",emergency,low_mood,roman_urdu
+"I bought a rope today. I'm done.",emergency,low_mood,english
+"main abhi chhat se koodne wali hun",emergency,low_mood,roman_urdu
+"Decided to end it all this weekend",emergency,low_mood,english
+"maine 20 tablets kha li hain",emergency,low_mood,roman_urdu
+"Tonight is the night, I'm going to end my life",emergency,low_mood,english
+"I'm standing on the bridge right now and I'm going to jump",emergency,low_mood,english
+"Overdosed on my meds, feeling dizzy",emergency,low_mood,english
+"sab ko alvida, kal subah tak main nahi rahungi",emergency,low_mood,roman_urdu
+"آج میرا دن بہت اچھا گزرا",clear,positive,urdu_script
+"مجھے بہت اکیلا پن محسوس ہوتا ہے",clear,low_mood,urdu_script
+"امی سے پھر لڑائی ہو گئی",clear,relationship_issues,urdu_script
+"سب کچھ بیکار ہے، کوئی فائدہ نہیں",mild,low_mood,urdu_script
+"میں اب جینا نہیں چاہتی",danger,low_mood,urdu_script
+"I'm so stressed yaar, kuch samajh nahi aa raha",clear,overwhelmed,mixed
+"exam ka result aaya and I actually passed!",clear,positive,mixed
+"she ignored me again, mujhe bura laga",clear,relationship_issues,mixed
+"I feel so lonely, koi baat karne wala nahi",clear,low_mood,mixed
+"kabhi kabhi I just want to die honestly",danger,low_mood,mixed
+"I took my tablets this morning",clear,general|low_mood,english
+"I don't wake up early on weekends",clear,general,english
+"I want to sleep in and not wake up before noon tomorrow lol",clear,general,english
+"machhar marna hai, poora kamra bhar gaya hai",clear,general,roman_urdu
+"main abhi pool mein koodungi, bohot garmi hai",clear,general|positive,roman_urdu

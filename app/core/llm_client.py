@@ -121,6 +121,19 @@ When unsure between two tiers, choose the higher one.
 {hint}"""
 
 
+def _filtered_categories(exc: openai.BadRequestError) -> set[str]:
+    """The categories Azure's content filter blocked a prompt for; empty for any other error."""
+    body = exc.body if isinstance(exc.body, dict) else {}
+    if body.get("code") != "content_filter":
+        return set()
+    return {
+        name
+        for item in body.get("content_filters") or []
+        for name, result in (item.get("content_filter_results") or {}).items()
+        if isinstance(result, dict) and result.get("filtered")
+    }
+
+
 def classify(
     history: list[tuple[str, str]],
     text: str,
@@ -154,6 +167,17 @@ def classify(
             store=False,
         )
         result = response.output_parsed
+    except openai.BadRequestError as exc:
+        # Azure's content filter turns away the very messages this call exists to
+        # screen, so the block is itself the signal: in the accuracy set every
+        # message blocked for self-harm was a risky one, most of them danger or
+        # emergency, and the rules alone missed several. Treating the block as
+        # "no answer" let those through as clear.
+        if "self_harm" in _filtered_categories(exc):
+            logger.warning("Classification blocked by the self-harm filter; treating as danger")
+            return Classification(domains=None, risk_tier="danger")
+        logger.warning("Classification failed: %s", type(exc).__name__)
+        return Classification(domains=None, risk_tier=None)
     except (openai.OpenAIError, LLMError) as exc:
         logger.warning("Classification failed: %s", type(exc).__name__)
         return Classification(domains=None, risk_tier=None)
