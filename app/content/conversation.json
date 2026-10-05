@@ -5,6 +5,10 @@
     "minimal_replies": 2,
     "containment_turns": null
   },
+  "chat": {
+    "_comment": "AI Chat: she ends a chat by starting a new one, so nothing closes it except the containment failsafe, set far out. repeat_limit and minimal_replies are not used for chat.",
+    "containment_turns": 100
+  },
   "free_write": {
     "_comment": "An extended session: she came to say what is on her mind, not to solve one problem in three turns. Circling the same thing is what unburdening looks like, and one 'hmm' while she thinks is not disengagement. The containment failsafe still applies, further out.",
     "repeat_limit": 5,

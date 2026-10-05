@@ -12,6 +12,9 @@ with open(_CONTENT_DIR / "work_issues.json", encoding="utf-8") as f:
 # Old entries were created with this spelling before the folder migration.
 JOURNAL_TYPE_ALIASES = {"checkin": "check_in"}
 
+# The AI Chat tab: a conversation from the first message, with no capture before it.
+CHAT = "chat"
+
 
 def normalise_journal_type(journal_type: str) -> str:
     return JOURNAL_TYPE_ALIASES.get(journal_type, journal_type)
@@ -48,7 +51,7 @@ def _distress_label(baseline: int | None) -> str:
     return f"{baseline}/10 — severe; be especially gentle and watch for risk"
 
 
-def _profile(account: Account, domains: list[str]) -> str:
+def _profile(account: Account, domains: list[str], chat: bool = False) -> str:
     issues = [WORK_ISSUE_LABELS[c] for c in (account.work_issues or []) if c in WORK_ISSUE_LABELS]
     coach = coach_mode(domains, account.work_issues)
 
@@ -62,6 +65,10 @@ def _profile(account: Account, domains: list[str]) -> str:
     else:
         lines.append("- Life vision: not shared")
 
+    if chat:
+        # The chat helps whenever she asks; coach mode only gates the journals.
+        lines.append("Use this to understand them. Never recite it back.")
+        return "\n".join(lines)
     if coach:
         lines.append(
             "- Coach mode: ON. This topic is one the user asked to work on. You may offer one small, "
@@ -116,6 +123,43 @@ def build_system_prompt(
             f"message: session_end true, closure_reason \"{close_reason}\", no question."
         )
 
+    return "\n\n".join(sections)
+
+
+def build_chat_prompt(
+    account: Account,
+    focus_codes: list[str],
+    domains: list[str],
+    reply_language: str = language.ENGLISH,
+    closing: bool = False,
+) -> str:
+    """
+    AI Chat. Its own self-contained prompt replaces the base instructions, which
+    are written for the conversation after a journal entry (offer, closure
+    rules, a recorded entry to refer to). Clinical context keeps its place as
+    the hard guardrail. Only the first topic's skill is added, as background:
+    switching tone with every message's topic is what made replies uneven.
+    """
+    sections = [md_loader.load("journal_types", CHAT)]
+
+    sections.append("# Clinical context (highest priority — follow these guardrails)")
+    sections += [md_loader.load("clinical_context", c) for c in clinical_codes(focus_codes)]
+
+    if domains:
+        sections.append(
+            "# Topic notes (background on this topic; the chat rules above decide how you talk)\n"
+            + md_loader.load("skills", domains[0])
+        )
+    sections.append(_profile(account, domains, chat=True))
+    sections.append(f"# Reply language\n{language.instruction(reply_language)}")
+
+    if closing:
+        # FR-AIR-013 containment, detected by code; never shown to the user.
+        sections.append(
+            "# System note\nThis chat has run very long. Your reply MUST close it warmly: "
+            "say one thing they shared or reached, suggest one small thing they can do right "
+            "now, and tell them they can start a fresh chat any time. No question."
+        )
     return "\n\n".join(sections)
 
 

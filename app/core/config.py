@@ -18,6 +18,9 @@ class Settings(BaseSettings):
     OPENAI_BASE_URL: str | None = None
     OPENAI_CLASSIFIER_MODEL: str = "gpt-5.4-mini"
     OPENAI_RESPONSE_MODEL: str = "gpt-5.4-mini"
+    # AI Chat replies; unset uses OPENAI_RESPONSE_MODEL. Lets the chat run on a
+    # stronger model than the journals without changing every call.
+    OPENAI_CHAT_MODEL: str | None = None
     # Voice messages: Azure Speech on the Foundry resource. Both may stay unset:
     # the endpoint then comes from OPENAI_BASE_URL's resource, and the key is OPENAI_API_KEY.
     AZURE_SPEECH_ENDPOINT: str | None = None

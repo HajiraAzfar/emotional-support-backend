@@ -1,6 +1,9 @@
 """
 Entry engine.
 
+AI Chat (journal type "chat") has no capture: the conversation is open from
+creation, and POST /entries/{id}/messages is the whole flow.
+
 Flow for a journal type with a capture schedule (check_in, savouring, thought, free_write):
   POST /entries                     → entry created, first capture prompt added
   POST /entries/{id}/captures       → one value recorded, next prompt added;
@@ -317,10 +320,11 @@ def _closing_text(db: Session, entry: Entry, account: Account, values: list[dict
 
 
 def _conversation_history(messages: list[Message]) -> list[tuple[str, str]]:
-    """Only the conversation after the offer; capture Q&A reaches the model as the entry summary."""
-    offer_seq = next((m.sequence for m in messages if m.kind == "offer"), None)
-    if offer_seq is None:
-        return []
+    """
+    Only the conversation after the offer; capture Q&A reaches the model as the
+    entry summary. An AI Chat has no offer: all of it is conversation.
+    """
+    offer_seq = next((m.sequence for m in messages if m.kind == "offer"), 0)
     return [
         (m.role, m.content)
         for m in messages
@@ -375,6 +379,34 @@ def _reflect(
     # One consolidating turn after she moves, then the closing message.
     entry.conversation_stage = enforcement.CONFIRMING if outcome.shift_noticed else enforcement.EXPLORING
     return outcome
+
+
+def _chat_reply(
+    db: Session,
+    entry: Entry,
+    account: Account,
+    history: list[tuple[str, str]],
+    text: str,
+    domains: list[str] | None,
+) -> enforcement.Outcome:
+    """
+    AI Chat: chat prompt → reply → enforcement. No entry summary and no closure
+    rules; only the containment failsafe ends a chat (FR-AIR-013). Raises LLMError.
+    """
+    domains = domains or entry.domains or ["general"]
+    entry.domains = domains
+    user_texts = [c for role, c in history if role == "user"] + [text]
+    limit = capture.conversation_limits(context_builder.CHAT)["containment_turns"]
+    closing = sum(1 for role, _ in history if role == "ai") >= (limit or settings.CONVERSATION_CONTAINMENT_TURNS)
+    system_prompt = context_builder.build_chat_prompt(
+        account,
+        _focus_codes(db, account),
+        domains,
+        reply_language=language.reply_language(user_texts),
+        closing=closing,
+    )
+    reply = llm_client.generate_chat_reply(system_prompt, history, text)
+    return enforcement.enforce_chat(reply, closing=closing)
 
 
 def _suppress_conversation(db: Session, entry: Entry, account: Account) -> None:
@@ -433,6 +465,7 @@ def _summary(db: Session, entry: Entry) -> EntrySummary:
         mood=mood,
         name=name,
         cycle=_cycle_number(db, entry),
+        conversation_status=entry.conversation_status,
         preview=(preview[:120] + "…") if preview and len(preview) > 120 else preview,
     )
 
@@ -444,6 +477,7 @@ def list_entries(
     status_: str = Query("all", alias="status", pattern="^(all|completed|in_progress)$"),
     since_days: int | None = Query(None, ge=1, le=3650),
     q: str | None = Query(None, min_length=1, max_length=100),
+    journal_type: str | None = Query(None, max_length=50),
     limit: int = Query(50, ge=1, le=200),
     db: Session = Depends(get_db),
     account: Account = Depends(get_current_user),
@@ -451,10 +485,13 @@ def list_entries(
     """
     FR-ENT-006: the user's entries, most recently touched first. Drafts are
     included by default so nothing she wrote is hidden; status=in_progress
-    &since_days=7 gives the drafts the dashboard offers to resume (FR-HOME-002).
+    &since_days=7 gives the drafts the dashboard offers to resume (FR-HOME-002);
+    journal_type=chat gives the AI Chat tab its chats.
     q searches what she wrote: her answers and every message of the thread.
     """
     query = db.query(Entry).filter(Entry.account_id == account.id)
+    if journal_type:
+        query = query.filter(Entry.journal_type == journal_type)
     if status_ != "all":
         query = query.filter(Entry.status == status_)
     if q:
@@ -479,6 +516,13 @@ def create_entry(
     account: Account = Depends(get_current_user),
 ):
     journal_type = context_builder.normalise_journal_type(payload.journal_type)
+    if journal_type == context_builder.CHAT:
+        # AI Chat: nothing to capture and no offer. She talks, Echo answers.
+        entry = Entry(account_id=account.id, journal_type=journal_type, status="in_progress", conversation_status="active")
+        db.add(entry)
+        db.commit()
+        db.refresh(entry)
+        return _state(db, entry, account)
     if not (context_builder.is_supported_journal_type(journal_type) and capture.has_schedule(journal_type)):
         raise HTTPException(status_code=422, detail="Unsupported journal type")
 
@@ -735,6 +779,11 @@ def add_message(
 
     # FR-ENT-026: the user's message is stored before anything else can fail.
     _add_message(db, entry, "user", "chat", text)
+    is_chat = _journal_type(entry) == context_builder.CHAT
+    if is_chat and entry.status == "in_progress":
+        # A chat is a saved conversation from its first message (FR-ENT-020's counterpart).
+        entry.status = "completed"
+        entry.completed_at = datetime.utcnow()
     db.commit()
 
     event, classification = _screen(db, account, entry, "chat", text, history)
@@ -754,7 +803,10 @@ def add_message(
         return _state(db, entry, account, crisis_event=event)
 
     try:
-        outcome = _reflect(db, entry, account, history, text, classification.domains)
+        if is_chat:
+            outcome = _chat_reply(db, entry, account, history, text, classification.domains)
+        else:
+            outcome = _reflect(db, entry, account, history, text, classification.domains)
     except llm_client.LLMError:
         _add_message(db, entry, "ai", "notice", REPLY_UNAVAILABLE)
         db.commit()

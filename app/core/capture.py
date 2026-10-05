@@ -26,6 +26,8 @@ VARIANTS: dict[str, dict] = {name: f["variant"] for name, f in _SCHEDULE_FILES.i
 # Journals that end with a grounding message for users with the past-event focus
 # area, whatever their ending (FR-JRN-008).
 GROUNDING_JOURNALS = {"free_write", "thought"}
+# Journal types that are a conversation with no capture schedule (the AI Chat tab).
+CONVERSATION_ONLY = {"chat"}
 GROUNDING_FOCUS = "trauma_ptsd"
 GROUNDING: dict = _read(_CONTENT_DIR / "grounding.json")
 # Skills that always apply to a journal type, whatever the detected topic
@@ -87,7 +89,7 @@ def _check_content() -> None:
     for name in CONVERSATION:
         if name.startswith("_") or name == "default":
             continue
-        if name not in SCHEDULES:
+        if name not in SCHEDULES and name not in CONVERSATION_ONLY:
             raise RuntimeError(f"conversation.json: {name} is not a journal type")
         if set(CONVERSATION[name]) - set(CONVERSATION["default"]) - {"_comment"}:
             raise RuntimeError(f"conversation.json: {name} sets a limit that does not exist")

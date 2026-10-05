@@ -98,3 +98,5 @@ class EntrySummary(BaseModel):
     cycle: int | None = None
     # The opening of what she wrote, so an entry is recognisable in the list.
     preview: str | None = None
+    # An AI Chat whose conversation is "active" can be carried on from the list.
+    conversation_status: str | None = None

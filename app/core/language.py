@@ -73,9 +73,10 @@ def reply_language(user_texts: list[str], default: str = ENGLISH) -> str:
 
 _AAP = (
     " Always address the user as \"aap\" (aap, aapka, aapki, aapko, aapne, aap se) with the matching "
-    "respectful verb forms (\"aap kar sakti hain\", \"aapko kaisa laga\") — never \"tum\" or \"tu\", "
-    "even if the user writes that way. Keep the feminine agreement throughout: "
-    "\"aap dekhti hain\", \"aap kehti hain\", \"aap ne socha\" — never \"aap dekhte hain\"."
+    "respectful verb forms (\"aapko kaisa laga\", \"aap ne kya socha\") — never \"tum\" or \"tu\", "
+    "even if the user writes that way. Follow the user's own gender as their messages show it: "
+    "\"thak gayi hun\" → \"aap thak gayi hongi\", \"thak gaya hun\" → \"aap thak gaye honge\". "
+    "Until you can tell, phrase sentences so they need no gendered verb (\"din kaisa raha?\")."
 )
 
 _INSTRUCTIONS = {

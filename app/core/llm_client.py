@@ -63,6 +63,13 @@ class Reflection(BaseModel):
     crisis_indicators_noticed: bool
 
 
+class ChatReply(BaseModel):
+    # Risk is decided before the reply is written.
+    crisis_indicators_noticed: bool
+    response_text: str
+    referral_flag: bool
+
+
 class LLMError(Exception):
     pass
 
@@ -296,21 +303,42 @@ def generate_reflection(
     items = _as_input(history[-RESPONSE_HISTORY:], text)
     if not items:
         items = [{"role": "user", "content": "(I've finished my entry and chose to talk it through.)"}]
+    return _parse_reply(settings.OPENAI_RESPONSE_MODEL, system_prompt, items, Reflection)
+
+
+def generate_chat_reply(
+    system_prompt: str,
+    history: list[tuple[str, str]],
+    text: str,
+) -> ChatReply:
+    """One AI Chat turn. Raises LLMError if no usable reply comes back."""
+    if settings.LLM_MOCK:
+        return ChatReply(
+            crisis_indicators_noticed=False,
+            response_text="(Mock) Acha, aur batayein. Kya chal raha hai?",
+            referral_flag=False,
+        )
+    items = _as_input(history[-RESPONSE_HISTORY:], text)
+    model = settings.OPENAI_CHAT_MODEL or settings.OPENAI_RESPONSE_MODEL
+    return _parse_reply(model, system_prompt, items, ChatReply)
+
+
+def _parse_reply(model: str, system_prompt: str, items: list[dict], text_format):
     # The model sometimes files a perfectly ordinary reply as a "refusal" content
     # part, which leaves output_parsed empty; measured at roughly one call in ten.
     # It is transient, so quiet retries spare the user the "couldn't reply" notice.
     for attempt in range(3):
         try:
             response = _get_client().responses.parse(
-                model=settings.OPENAI_RESPONSE_MODEL,
+                model=model,
                 instructions=system_prompt,
                 input=items,
-                text_format=Reflection,
+                text_format=text_format,
                 store=False,
             )
         except (openai.OpenAIError, LLMError) as exc:
             raise LLMError(str(exc)) from exc
         if response.output_parsed is not None:
             return response.output_parsed
-        logger.warning("Reflection returned no parsable output (attempt %d)", attempt + 1)
+        logger.warning("Reply returned no parsable output (attempt %d)", attempt + 1)
     raise LLMError("Model returned no parsable output (possibly a refusal)")

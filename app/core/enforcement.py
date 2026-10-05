@@ -2,7 +2,7 @@ import logging
 import re
 from dataclasses import dataclass
 
-from app.core.llm_client import Reflection
+from app.core.llm_client import ChatReply, Reflection
 
 logger = logging.getLogger(__name__)
 
@@ -17,6 +17,9 @@ MINIMAL_REPLIES = 2
 EXPLORING, CONFIRMING = "exploring", "confirming"
 
 _SENTENCE_SPLIT = re.compile(r"(?<=[.!?؟])\s+")
+# The same split, keeping what separated the sentences (a space, or the line
+# break before a numbered idea) so a trimmed reply keeps its shape.
+_SENTENCE_SPLIT_KEEP = re.compile(r"(?<=[.!?؟])(\s+)")
 
 
 @dataclass
@@ -107,15 +110,17 @@ def limit_questions(text: str, allowed: int) -> str:
     """
     if count_questions(text) <= allowed:
         return text
+    parts = _SENTENCE_SPLIT_KEEP.split(text)
+    sentences, separators = parts[0::2], parts[1::2] + [""]
     kept, asked = [], 0
-    for sentence in _SENTENCE_SPLIT.split(text):
+    for sentence, separator in zip(sentences, separators):
         is_question = sentence.rstrip().endswith(("?", "؟"))
         if is_question:
             if asked >= allowed:
                 continue
             asked += 1
-        kept.append(sentence)
-    result = " ".join(kept).strip()
+        kept.append(sentence + separator)
+    result = "".join(kept).strip()
     return result or text
 
 
@@ -165,4 +170,25 @@ def enforce(
         referral=reflection.referral_flag or crisis,
         session_end=session_end,
         closure_reason=reason,
+    )
+
+
+def enforce_chat(reply: ChatReply, closing: bool = False) -> Outcome:
+    """
+    AI Chat: the same last word as enforce(), without the journal's closure
+    rules — she ends a chat by starting a new one. Only the containment
+    failsafe closes it (`closing`), and risk is never cleared.
+    """
+    crisis = reply.crisis_indicators_noticed
+    session_end = closing and not crisis
+    text = reply.response_text.strip() or "I'm here. Tell me more?"
+    text = limit_questions(text, allowed=0 if session_end else 1)
+    if not session_end:
+        text = drop_recap_opener(text)
+    return Outcome(
+        reply_text=text,
+        crisis=crisis,
+        referral=reply.referral_flag or crisis,
+        session_end=session_end,
+        closure_reason="containment" if session_end else None,
     )
