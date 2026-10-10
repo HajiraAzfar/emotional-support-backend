@@ -14,7 +14,7 @@ Implements **SRS-ESC-001 v0.9**. Progress, decisions and deviations are recorded
 - bcrypt password hashing, JWT (HS256) sessions
 - OpenAI Python SDK, pointed at Azure OpenAI (`gpt-4.1-mini`) for every generated message
 
-> The mobile client is React Native and lives in a separate repository.
+> The mobile client is React Native and lives in a separate repository.   
 
 ---
 

@@ -3,7 +3,7 @@ title: Facing what you avoid
 summary: How exposure works, and why it goes one small step at a time.
 category: Coping
 minutes: 5
-status: DRAFT — must be reviewed and approved by the Clinical Advisor before release
+status: DRAFT_NOT_CLINICALLY_APPROVED — must be reviewed and approved by the Clinical Advisor before release
 ---
 
 Avoiding something frightening brings instant relief, and the relief is exactly the problem: it teaches the mind that the danger was real and that avoiding it is what kept you safe. The fear gets a little stronger each time.

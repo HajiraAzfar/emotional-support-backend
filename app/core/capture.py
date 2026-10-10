@@ -60,9 +60,32 @@ LIBRARY_NAMES: dict[str, dict[str, str]] = {
 }
 
 
+# A schedule says what to collect, never what to say: wording comes from the model
+# or capture_fallbacks.json. These are the only keys a value may have.
+VALUE_TYPES = {"scale", "single_select", "multi_select", "text"}
+SPEC_KEYS = {"id", "value_type", "control", "required", "library", "scale", "max_length", "depends_on",
+             "min_mood", "max_mood", "prefer_valence", "repeatable", "pause_after", "voice"}
+SCHEDULE_KEYS = {"journal_type", "ending", "skills", "notice", "variant", "values", "_comment"}
+
+
+def _check_no_wording(name: str, schedule: dict) -> None:
+    if set(schedule) - SCHEDULE_KEYS:
+        raise RuntimeError(f"{name}: unknown schedule keys {sorted(set(schedule) - SCHEDULE_KEYS)}")
+    for spec in schedule["values"]:
+        if set(spec) - SPEC_KEYS:
+            raise RuntimeError(f"{name}.{spec['id']}: keys a schedule may not hold {sorted(set(spec) - SPEC_KEYS)}")
+        if spec["value_type"] not in VALUE_TYPES:
+            raise RuntimeError(f"{name}.{spec['id']}: value_type must be one of {sorted(VALUE_TYPES)}")
+
+
 def _check_content() -> None:
+    for name, schedule in _SCHEDULE_FILES.items():
+        _check_no_wording(name, schedule)
     for journal_type, values in SCHEDULES.items():
         for spec in values:
+            # A mood condition can only be judged once mood is recorded.
+            if ("min_mood" in spec or "max_mood" in spec) and "mood" not in [v["id"] for v in values[:values.index(spec)]]:
+                raise RuntimeError(f"{journal_type}.{spec['id']}: mood condition but no earlier mood value")
             if spec["control"] == "multi_select" and spec["library"] not in LIBRARIES:
                 raise RuntimeError(f"{journal_type}.{spec['id']}: unknown library {spec['library']}")
             if spec["control"] == "scale" and spec["scale"] not in SCALES:
@@ -96,6 +119,67 @@ def _check_content() -> None:
 
 
 _check_content()
+
+
+# ---------- daily check-in (the app runs the steps; one submit at the end) ----------
+
+CHECKIN: dict = _read(_CONTENT_DIR / "checkin_factors.json")
+CHECKIN_ITEMS: dict[str, dict] = {item["id"]: item for item in CHECKIN["items"]}
+MOODS = range(1, 6)
+
+
+def _check_checkin() -> None:
+    if len(CHECKIN_ITEMS) != len(CHECKIN["items"]):
+        raise RuntimeError("checkin_factors.json: duplicate chip ids")
+    categories = {c["id"] for c in CHECKIN["categories"]}
+    for item in CHECKIN["items"]:
+        if item["category"] not in categories or not set(item["moods"]) <= set(MOODS):
+            raise RuntimeError(f"checkin_factors.json: {item['id']} has an unknown category or mood")
+    # No mood may ever show an empty category.
+    for category in categories:
+        for mood in MOODS:
+            if not any(i["category"] == category and mood in i["moods"] for i in CHECKIN["items"]):
+                raise RuntimeError(f"checkin_factors.json: no {category} chip for mood {mood}")
+
+
+_check_checkin()
+# The chips are stored as the check-in's `triggers` value, so Insights names them
+# from that library; old-only ids keep their old names.
+LIBRARY_NAMES["triggers"] = {**LIBRARY_NAMES["triggers"], **{i: item["label"] for i, item in CHECKIN_ITEMS.items()}}
+
+
+def mood_band(mood: int) -> str:
+    return "high" if mood >= 4 else "mid" if mood == 3 else "low"
+
+
+def checkin_factors(mood: int, user_terms: list[dict]) -> dict:
+    """
+    The chips for this mood, grouped and ordered, plus the app-owned wording of the
+    step. Her own words come first, at every mood, because only she knows what they mean.
+    """
+    categories = [
+        {
+            **{k: c[k] for k in ("id", "label", "label_ur", "label_roman")},
+            "items": [
+                {k: i[k] for k in ("id", "label", "label_ur", "label_roman")}
+                for i in sorted(CHECKIN["items"], key=lambda i: i["order"])
+                if i["category"] == c["id"] and mood in i["moods"]
+            ],
+        }
+        for c in sorted(CHECKIN["categories"], key=lambda c: c["order"])
+    ]
+    if user_terms:
+        mine = [{"id": t["id"], "label": t["name"], "label_ur": t["name"], "label_roman": t["name"]} for t in user_terms]
+        categories = [{"id": "my_words", "label": "My words", "label_ur": "میرے الفاظ",
+                       "label_roman": "Mere alfaaz", "items": mine}] + categories
+    return {"prompt": CHECKIN["prompts"][mood_band(mood)], "note_prompt": CHECKIN["prompts"]["note"],
+            "categories": categories}
+
+
+def checkin_fallback_closing(mood: int, avoid: list[str]) -> str:
+    """Stored closing for when the model can't write one: never the line she saw last."""
+    lines = CHECKIN["closings"][mood_band(mood)]
+    return next((line for line in lines if line not in avoid), lines[0])
 
 
 # FR-PICK-006: libraries a user may add her own terms to.
@@ -221,13 +305,18 @@ def _asked(spec: dict, recorded: dict[str, Any]) -> bool:
     """
     Whether this value is worth asking. A value with depends_on follows up on
     another one, so it is only asked when that one was actually answered —
-    "how strong was it?" makes no sense after she skipped the feelings.
+    "how strong was it?" makes no sense after she skipped the feelings. A
+    min_mood / max_mood condition asks it only within that mood range.
     """
     depends_on = spec.get("depends_on")
-    if depends_on is None:
-        return True
-    answer = recorded.get(depends_on)
-    return answer is not None and answer != [] and answer != ""
+    if depends_on is not None:
+        answer = recorded.get(depends_on)
+        if answer is None or answer == [] or answer == "":
+            return False
+    mood = recorded.get("mood")
+    if mood is not None and not (spec.get("min_mood", mood) <= mood <= spec.get("max_mood", mood)):
+        return False
+    return True
 
 
 def next_value(values: list[dict], recorded: dict[str, Any]) -> dict | None:
@@ -236,6 +325,21 @@ def next_value(values: list[dict], recorded: dict[str, Any]) -> dict | None:
         if spec["id"] not in recorded and _asked(spec, recorded):
             return spec
     return None
+
+
+def not_asked(values: list[dict], recorded: dict[str, Any]) -> list[str]:
+    """
+    Values the schedule's conditions passed over before the next one to ask (or
+    before the end). They are stored as not asked, never as skipped.
+    """
+    passed = []
+    for spec in values:
+        if spec["id"] in recorded:
+            continue
+        if _asked(spec, recorded):
+            break
+        passed.append(spec["id"])
+    return passed
 
 
 def scale_bounds(value_id: str) -> tuple[int, int] | None:
@@ -292,10 +396,10 @@ def validate(spec: dict, value: Any, skipped: bool, extra: Extra = None) -> Any:
     raise InvalidAnswer(f"Unsupported control {control}")
 
 
-def display_text(spec: dict, value: Any, extra: Extra = None) -> str:
-    """How an answer appears as the user's message in the thread."""
+def display_text(spec: dict, value: Any, extra: Extra = None) -> str | None:
+    """How an answer appears as the user's message in the thread. An empty answer has no message."""
     if value is None:
-        return "Skipped"
+        return None
     if spec["control"] == "scale":
         label = next(o["label"] for o in SCALES[spec["scale"]] if o["value"] == value)
         return f"{value} — {label}"
@@ -317,6 +421,8 @@ def spec_out(spec: dict) -> dict:
         "prefer_valence": spec.get("prefer_valence"),
         # FR-JRN-003: free write is one value the user may send in several messages.
         "repeatable": bool(spec.get("repeatable")),
+        # She may speak this answer instead of typing it.
+        "voice": bool(spec.get("voice")),
     }
     return out
 
@@ -324,15 +430,16 @@ def spec_out(spec: dict) -> dict:
 def summary(values: list[dict], recorded: dict[str, Any], extra: Extra = None) -> str:
     """
     Plain-language record of the entry for the model (FR-AIR-002).
-    recorded maps value_id → stored value (None = skipped).
+    recorded maps value_id → stored value (None = left empty or not asked).
+    Empty values are left out: nothing may comment on them.
     """
     lines = []
     for spec in values:
-        if spec["id"] not in recorded:
+        value = recorded.get(spec["id"])
+        if value is None:
             continue
-        value = recorded[spec["id"]]
-        shown = "skipped" if value is None else display_text(spec, value, extra)
-        if spec["control"] == "free_text" and value is not None:
+        shown = display_text(spec, value, extra)
+        if spec["control"] == "free_text":
             shown = f"<user_text>{value}</user_text>"
         lines.append(f"- {spec['id']}: {shown}")
     return "\n".join(lines) if lines else "- nothing recorded yet"

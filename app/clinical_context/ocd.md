@@ -1,3 +1,7 @@
+---
+status: DRAFT_NOT_CLINICALLY_APPROVED
+---
+
 # Clinical context: OCD
 
 The user told us OCD is part of why they are here.

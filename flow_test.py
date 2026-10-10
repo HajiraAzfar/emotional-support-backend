@@ -129,7 +129,7 @@ check(cols == {"id", "account_id", "entry_id", "field", "tier", "variant", "crea
 print("--- D: emergency tier in free write")
 j = post("/entries", {"journal_type": "free_write"}); uf = f"/entries/{j['id']}"
 j = post(uf + "/captures", {"value_id": "account", "value": "I'm going to kill myself tonight"})
-check(j["crisis_event"]["tier"] == "emergency" and "1122" in j["crisis_event"]["text"], "emergency event with fixed emergency content")
+check(j["crisis_event"]["tier"] == "emergency" and "emergency number" in j["crisis_event"]["text"], "emergency event with fixed emergency content")
 check(j["conversation_status"] == "suppressed", "no AI offered after emergency")
 
 print("--- E: conversation (mock) + chat crisis")
@@ -145,17 +145,23 @@ check(c.post(u + "/messages", json={"content": "hello?"}).status_code == 409, "n
 print("--- F: model stage + no generative calls once suppressed (mocked OpenAI)")
 settings.LLM_MOCK = False; settings.OPENAI_API_KEY = "test"
 calls = []
-model = {"risk": "clear", "reflection_crisis": False, "shift": False}
+NO_HARM = lc.Safety(harm_type="none", timing="none", danger_now="no", about="self", discloses=False, distress_now=False, asks_for_help=False)
+model = {"risk": "clear", "reflection_crisis": False, "shift": False, "safety": NO_HARM}
 
 
 def parse(**kw):
     calls.append(kw["text_format"].__name__)
+    model["instructions"] = kw.get("instructions")
     fmt = kw["text_format"]
     if fmt is lc.CapturePrompt:
         want = kw["instructions"].split("# Value to request\n")[1].strip()
         return SimpleNamespace(output_parsed=lc.CapturePrompt(value_id=want, message_text=f"AI asks {want}"))
     if fmt is lc.DomainResult:
-        return SimpleNamespace(output_parsed=lc.DomainResult(domains=["overthinking"], risk_tier=model["risk"]))
+        return SimpleNamespace(output_parsed=lc.DomainResult(safety=model["safety"], domains=["overthinking"], risk_tier=model["risk"]))
+    if fmt is lc.ChatReply:
+        # Scripted replies, in order, when a test sets them; otherwise a fixed one.
+        text = model["replies"].pop(0) if model.get("replies") else "Model reply here."
+        return SimpleNamespace(output_parsed=lc.ChatReply(crisis_indicators_noticed=model["reflection_crisis"], response_text=text, referral_flag=False))
     return SimpleNamespace(output_parsed=lc.Reflection(same_concern_count=1, shift_noticed=model.get("shift", False), response_text="Model reply here.", session_end=False, closure_reason="none",
                                                        referral_flag=False, crisis_indicators_noticed=model["reflection_crisis"]))
 
@@ -170,7 +176,7 @@ with patch.object(lc, "_get_client", return_value=fake):
     j = post(u + "/captures", {"value_id": "trigger_note", "value": "sab theek hai bas"})  # lexical clear, model danger
     check(j["crisis_event"]["tier"] == "danger", "model tier wins when higher than rules (FR-CRIS-002)")
     check(calls == ["DomainResult"], f"after danger, no capture-prompt generation (calls: {calls})")
-    check(j["messages"][-1]["content"] == "Did any of these thinking patterns show up? Pick any that fit, or skip.", "next prompt uses stored wording")
+    check(j["messages"][-1]["content"] == capture.fallback_wording("check_in", "thinking_traps"), "next prompt uses stored wording")
     calls.clear()
     post(u + "/captures", {"value_id": "thinking_traps", "value": []})
     post(u + "/captures", {"value_id": "feelings", "value": []})
@@ -184,6 +190,84 @@ with patch.object(lc, "_get_client", return_value=fake):
     check(j["messages"][-1]["kind"] == "crisis" and "Model reply" not in j["messages"][-1]["content"], "model-noticed risk: reply replaced by fixed content")
     check(j["conversation_status"] == "suppressed", "and conversation suppressed")
     model["reflection_crisis"] = False
+
+print("--- F2: AI Chat keeps talking through a disclosure; the card is its own field under the reply")
+from app.core import enforcement, md_loader  # noqa: E402
+
+
+def safety(harm, timing, danger="no", distress=False, discloses=True):
+    return lc.Safety(harm_type=harm, timing=timing, danger_now=danger, about="self", discloses=discloses,
+                     distress_now=distress, asks_for_help=False)
+
+
+def last_ai(j):
+    return [m for m in j["messages"] if m["role"] == "ai"][-1]
+
+
+LABELS = {"none", "soft", "prominent", "urgent"}
+
+with patch.object(lc, "_get_client", return_value=fake):
+    # N1–N5 from the 10 Oct test, replayed in order.
+    model.update(risk="clear", reflection_crisis=False, safety=safety("emotional_abuse", "past"),
+                 replies=["Living with that kind of abuse wears a person down. Are you safe now, and is he still in contact with you?"])
+    u = f"/entries/{post('/entries', {'journal_type': 'chat'})['id']}"
+    j = post(u + "/messages", {"content": "my husband was really abusive"})
+    check(last_ai(j)["card"] is None and "Ask once, gently" in model["instructions"], "N1: one safety question, no card for past abuse")
+    check("# Skill: abuse and violence" in model["instructions"], "the safety check loaded the abuse skill")
+    # A follow-up, even one the classifier still files under violence, gets no card.
+    model.update(safety=safety("physical_violence", "past", discloses=False), replies=["Getting yourself out of that marriage took real courage."])
+    j = post(u + "/messages", {"content": "I am safe now I am out of that marrigge"})
+    check(last_ai(j)["card"] is None, "N2: no card for a follow-up")
+    check(not any(m["content"].strip().lower() in LABELS for m in j["messages"]) and "support" not in [m["kind"] for m in j["messages"]],
+          "N3: no card label in the text, no separate card message")
+    model.update(safety=NO_HARM, replies=["soft"])  # a reply that is nothing but a label
+    j = post(u + "/messages", {"content": "Why u wrote soft"})
+    check(last_ai(j)["content"].strip().lower() not in LABELS, "N4: a reply that is only a card label never reaches her")
+    check("glitch on your" in model["instructions"], "N4: the honesty rule is in the prompt")
+    copied = "That's a heavy thing to have lived with, and it was never on you."
+    check(copied in md_loader.example_replies("skills", "abuse")[1], "the copied line really is a skill example")
+    model.update(safety=safety("physical_violence", "past"),
+                 replies=[f"{copied} Are you safe now, and out of that situation?",
+                          "What he did to you was never okay, and none of it was your fault. Are you safe now?"])
+    calls.clear()
+    j = post(u + "/messages", {"content": "Ok he use to beat me"})
+    n5 = last_ai(j)
+    earlier = [m["content"] for m in j["messages"] if m["role"] == "ai" and m["id"] != n5["id"]]
+    seen = earlier + md_loader.example_replies("journal_types", "chat") + md_loader.example_replies("skills", "abuse")
+    check(calls.count("ChatReply") == 2, "N5: a draft copying a skill example is written again")
+    check(not enforcement.repeated_sentences(n5["content"], seen), "N5: no full sentence from the examples or earlier replies")
+    check("safe" not in n5["content"].lower() and "don't ask about safety" in model["instructions"], "N5: no second safety question")
+    check(n5["card"] == "soft" and j["conversation_status"] == "active", "N5: soft card under the reply, chat open")
+    model.update(safety=safety("physical_violence", "past"))
+    j = post(u + "/messages", {"content": "he is not in my life now"})
+    check(last_ai(j)["card"] is None, "once per chat: no second card")
+    model.update(safety=safety("physical_violence", "ongoing", "unclear"))
+    j = post(u + "/messages", {"content": "He beats me"})
+    check(last_ai(j)["card"] == "prominent", "present violence: the same card again, prominent")
+
+    # She says she is safe before Echo asks: no safety question on any later turn.
+    model.update(safety=safety("physical_violence", "past"), replies=["Leaving took real strength. Are you safe now?"])
+    u = f"/entries/{post('/entries', {'journal_type': 'chat'})['id']}"
+    j = post(u + "/messages", {"content": "I am safe now, I left him last year"})
+    check(not enforcement.count_questions(last_ai(j)["content"]), "safe-now: not asked on the same turn")
+    model.update(safety=safety("physical_violence", "ongoing", "unclear"), replies=["That sounds unsettling. Are you safe when he does?"])
+    j = post(u + "/messages", {"content": "he still messages me sometimes"})
+    check("safe" not in last_ai(j)["content"].lower(), "safe-now: not asked on a later turn either")
+
+    model.update(risk="mild", safety=safety("emotional_abuse", "past"))
+    u = f"/entries/{post('/entries', {'journal_type': 'chat'})['id']}"
+    j = post(u + "/messages", {"content": "hey i am was in an abusive marriage and I am going through ptsd now"})
+    check(last_ai(j)["card"] is None and j["support_note"] is None, "R5: no card and no note on the first reply")
+    model.update(risk="clear", safety=safety("emotional_abuse", "past", distress=True, discloses=False))
+    j = post(u + "/messages", {"content": "No I just get scaredd"})
+    check(last_ai(j)["card"] == "soft" and "ONE small, gentle idea" in model["instructions"], "scaredd: coping earned, soft card now")
+
+    model.update(safety=NO_HARM, reflection_crisis=True)
+    u = f"/entries/{post('/entries', {'journal_type': 'chat'})['id']}"
+    j = post(u + "/messages", {"content": "whatever"})
+    check(last_ai(j)["content"] == "Model reply here." and last_ai(j)["card"] == "prominent", "chat: model-noticed risk keeps the reply, card turns prominent")
+    check(j["conversation_status"] == "active" and post(u + "/messages", {"content": "ok"})["conversation_status"] == "active", "and the chat goes on")
+    model.update(reflection_crisis=False)
 
 print("--- G: resume, list, delete")
 settings.OPENAI_API_KEY = None
@@ -262,7 +346,7 @@ def parse_savour(**kw):
         want = kw["instructions"].split("# Value to request\n")[1].strip()
         return SimpleNamespace(output_parsed=lc.CapturePrompt(value_id=want, message_text=f"AI asks {want}"))
     if fmt is lc.DomainResult:
-        return SimpleNamespace(output_parsed=lc.DomainResult(domains=["positive"], risk_tier="clear"))
+        return SimpleNamespace(output_parsed=lc.DomainResult(safety=NO_HARM, domains=["positive"], risk_tier="clear"))
     if fmt is lc.Closing:
         closing_calls.append(kw["instructions"])
         return SimpleNamespace(output_parsed=lc.Closing(message_text="Ammi ki tareef aapne sambhal li. Ek lamha ruk kar usay mehsoos kijiye. Kya aur kuch acha hua?"))
@@ -772,5 +856,346 @@ check(lift["enough"] and [cy["cycle"] for cy in lift["cycles"]] == [1, 2], "cycl
 check([(cy["before"], cy["during"], cy["after"]) for cy in lift["cycles"]] == [(8, 7, 4), (6, 5, 2)],
       "all three distress values per cycle (FR-INS-013)")
 check(not groups["call pe awaz kaanp jayegi"]["enough"], "a single cycle is not a comparison (FR-INS-014)")
+
+print("--- daily check-in: app-owned steps, one submit, model writes only the closing")
+import json  # noqa: E402
+settings.OPENAI_API_KEY = None; settings.LLM_MOCK = True
+with S() as w:
+    me = Account(email="ci@x.com", distress_baseline=4); w.add(me); w.commit(); w.refresh(me); me_id = me.id
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, me_id)
+STRESSORS = {"workload", "deadline", "argument", "feeling_ignored", "loneliness", "money", "sleep", "illness", "comparison"}
+POSITIVE = {"friends", "achievement", "rest", "nature", "hobby", "calm", "gratitude", "kindness", "good_food"}
+
+
+def chips(mood):
+    return {i["id"] for cat in c.get(f"/entries/check_in/factors?mood={mood}").json()["categories"] for i in cat["items"]}
+
+
+def check_in(mood, factors=(), note="", client_id=None):
+    r = c.post("/entries/check_in", json={"client_id": str(client_id or uuid.uuid4()), "mood": mood,
+                                          "factors": list(factors), "note": note})
+    assert r.status_code < 300, r.json()
+    return r.json()
+
+
+for m in range(1, 6):
+    cats = c.get(f"/entries/check_in/factors?mood={m}").json()["categories"]
+    check(all(cat["items"] for cat in cats), f"mood {m}: every category has chips")
+check(not chips(5) & STRESSORS and not chips(4) & STRESSORS, "T2: no stressor chips at mood 4-5")
+check(not chips(1) & POSITIVE and not chips(2) & POSITIVE, "no positive chips at mood 1-2")
+f5 = c.get("/entries/check_in/factors?mood=5").json()
+check(f5["prompt"]["en"] == "What was part of this mood?" and "trigger" not in json.dumps(f5).lower(),
+      "fixed wording per mood, no 'triggers' anywhere")
+check(c.get("/entries/check_in/factors?mood=6").status_code == 422, "mood outside 1-5 -> 422")
+
+r = check_in(5)
+with S() as w:
+    rows = w.query(CapturedValue).filter(CapturedValue.entry_id == uuid.UUID(r["entry_id"])).all()
+    msgs = w.query(Message).filter(Message.entry_id == uuid.UUID(r["entry_id"])).order_by(Message.sequence).all()
+check([x.key for x in rows] == ["mood"] and not any(x.skipped for x in rows), "T1: empty steps save nothing, no skip status")
+check([(x.role, x.kind) for x in msgs] == [("user", "capture_answer"), ("ai", "closing")], "T1: no bubble for an empty step")
+low = r["closing"].lower()
+check(r["closing"] and not any(w_ in low for w_ in ("skip", "trigger", "didn't", "nothing")), "T1: warm closing, says nothing about empty steps")
+check(r["card"] is None and r["crisis_event"] is None, "T1: no card on an ordinary check-in")
+
+r2 = check_in(5)
+check(r2["closing"] != r["closing"], "T9: same check-in twice -> different wording")
+r4 = check_in(2)
+check("!" not in r4["closing"] and r4["card"] is None, "T4: mood 2, all empty: gentle closing, no card")
+
+cid = uuid.uuid4()
+first = check_in(3, ["workload"], "busy day", client_id=cid)
+again = check_in(3, ["workload"], "busy day", client_id=cid)
+with S() as w:
+    n = w.query(Entry).filter(Entry.client_id == cid).count()
+check(again["entry_id"] == first["entry_id"] and again["closing"] == first["closing"] and n == 1, "retry with same client_id saves once")
+check(c.post("/entries/check_in", json={"client_id": str(uuid.uuid4()), "mood": 3, "factors": ["nope"]}).status_code == 422,
+      "unknown chip id -> 422")
+check(capture.LIBRARY_NAMES["triggers"]["illness"] == "Health worries" and capture.LIBRARY_NAMES["triggers"]["in_laws"] == "In-laws",
+      "Insights names new chips, old-only ids keep their names")
+
+post("/libraries/triggers/terms", {"name": "Cricket"})
+check(c.get("/entries/check_in/factors?mood=4").json()["categories"][0]["id"] == "my_words", "her own words come first, at any mood")
+
+for _ in range(3):
+    last = check_in(1)
+check(last["suggest"] == "chat", "three low check-ins in a row -> soft pointer to Chat")
+check(check_in(4)["suggest"] is None, "streak broken -> no pointer")
+
+settings.LLM_MOCK = False; settings.OPENAI_API_KEY = "test"
+ci = {"risk": "clear", "safety": NO_HARM, "closing": "Model closing."}
+
+
+def ci_parse(**kw):
+    fmt = kw["text_format"]
+    ci["instructions"] = kw.get("instructions")
+    ci.setdefault("calls", []).append(fmt.__name__)
+    if fmt is lc.DomainResult:
+        return SimpleNamespace(output_parsed=lc.DomainResult(safety=ci["safety"], domains=["general"], risk_tier=ci["risk"]))
+    return SimpleNamespace(output_parsed=lc.Closing(message_text=ci["closing"]))
+
+
+fake = MagicMock(); fake.responses.parse.side_effect = ci_parse
+with patch.object(lc, "_get_client", return_value=fake):
+    ci["risk"] = "danger"
+    ci["safety"] = lc.Safety(harm_type="self_harm", timing="ongoing", danger_now="unclear", about="self",
+                             discloses=True, distress_now=True, asks_for_help=False)
+    ci["closing"] = "I'm really glad you told me. You matter, and you don't have to hold this alone."
+    ci["calls"] = []
+    r = check_in(1, note="I don't want to be here")
+    check(r["crisis_event"]["tier"] == "danger" and r["card"] == "prominent", "T3: danger flow fires, prominent card")
+    check(ci["calls"] == ["DomainResult"], f"T3: danger in a journal -> zero generation calls (calls: {ci['calls']})")
+    check(r["closing"] == r["crisis_event"]["text"] and r["closing"] != ci["closing"], "T3: fixed crisis content, never a model reply")
+
+    ci["risk"], ci["safety"] = "clear", NO_HARM
+    ci["closing"] = "Work and sleep, that's a lot. What helped? Did anything else? card: soft"
+    r = check_in(2, ["workload", "sleep"], note="long day")
+    check(r["closing"].count("?") == 1 and "card" not in r["closing"], "at most one question; card labels stripped")
+    check("What was part of it: Workload, Sleep" in ci["instructions"] and "triggers" not in ci["instructions"].split("# What she recorded")[1],
+          "model reads plain labels, never field names")
+    ci["closing"] = "A really good day, nice to hear. Hope some of it carries into tomorrow."
+    r = check_in(5)
+    check(r["closing"] != ci["closing"], "a closing copied from the skill examples is replaced")
+settings.OPENAI_API_KEY = None; settings.LLM_MOCK = False
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
+
+print("--- Phase B: shared journal engine")
+from app.core import crisis as crisis_mod  # noqa: E402
+GENERATION = {"CapturePrompt", "Closing", "ChatReply", "Reflection"}
+
+
+def new_account(email, focus=None):
+    with S() as w:
+        a = Account(email=email, distress_baseline=4); w.add(a); w.commit(); w.refresh(a)
+        if focus:
+            w.add(FocusArea(account_id=a.id, code=focus)); w.commit()
+        return a.id
+
+
+def as_user(account_id):
+    app.dependency_overrides[get_current_user] = lambda: S().get(Account, account_id)
+
+
+def default_answer(spec):
+    if spec["control"] == "scale":
+        return spec["scale"][len(spec["scale"]) // 2]["value"]
+    if spec["control"] == "multi_select":
+        return []
+    return "it was a day" if spec["required"] else ""
+
+
+def drive(journal_type, answer=default_answer, until=None):
+    """Answers every step of one journal, the way the app does, until it completes."""
+    j = post("/entries", {"journal_type": journal_type}); u = f"/entries/{j['id']}"
+    for _ in range(40):
+        if j["status"] == "completed" or (until and j["next_capture"] and j["next_capture"]["value_id"] == until):
+            return u, j
+        if j["pending_notice"]:
+            j = post(u + "/acknowledge", {}); continue
+        if j["pending_resume"]:
+            j = post(u + "/resume", {}); continue
+        spec = j["next_capture"]
+        j = post(u + "/captures", {"value_id": spec["value_id"], "value": answer(spec)})
+    raise AssertionError(f"{journal_type} never completed")
+
+
+def rows(u):
+    with S() as w:
+        return {r.key: r for r in w.query(CapturedValue).filter(CapturedValue.entry_id == uuid.UUID(u.split("/")[-1])).all()}
+
+
+plain, trauma = new_account("b1@x.com"), new_account("b2@x.com", "trauma_ptsd")
+JOURNALS = ["check_in", "savouring", "thought", "exposure", "free_write"]
+
+# Schedules hold no wording.
+for name, sched in capture._SCHEDULE_FILES.items():
+    capture._check_no_wording(name, sched)
+check(True, "every schedule holds only structure, no wording")
+try:
+    capture._check_no_wording("bad", {"values": [{"id": "x", "value_type": "text", "control": "free_text", "prompt": "Hi?"}]})
+    check(False, "a schedule with wording is rejected")
+except RuntimeError:
+    check(True, "a schedule with wording is rejected at startup")
+
+# Model down: every journal, both variants, completes on stored wording.
+settings.OPENAI_API_KEY = "test"; settings.LLM_MOCK = False
+down = MagicMock(); down.responses.parse.side_effect = lc.openai.OpenAIError("service down")
+with patch.object(lc, "_get_client", return_value=down):
+    for who, label in ((plain, "standard"), (trauma, "past-event focus")):
+        as_user(who)
+        for jt in JOURNALS:
+            u, j = drive(jt)
+            check(j["status"] == "completed", f"model down: {jt} ({label}) completes")
+            prompts = [m for m in j["messages"] if m["kind"] == "capture_prompt"]
+            check(all(m["content"] == capture.fallback_wording(jt, m["value_id"]) for m in prompts),
+                  f"model down: {jt} ({label}) used stored wording only")
+settings.OPENAI_API_KEY = None
+
+# Danger in any journal's free text: zero generation calls from then on.
+b = {"calls": [], "risk": "clear", "safety": None, "prompt": None}
+
+
+def b_parse(**kw):
+    fmt = kw["text_format"]
+    b["calls"].append(fmt.__name__)
+    if fmt is lc.DomainResult:
+        return SimpleNamespace(output_parsed=lc.DomainResult(safety=b["safety"] or NO_HARM, domains=["general"], risk_tier=b["risk"]))
+    if fmt is lc.CapturePrompt:
+        want = kw["instructions"].split("# Value to request\n")[1].strip()
+        text, vid = b["prompt"] or (f"Tell me about {want.split('_')[0]}.", want)
+        return SimpleNamespace(output_parsed=lc.CapturePrompt(value_id=vid, message_text=text))
+    if fmt is lc.ChatReply:
+        return SimpleNamespace(output_parsed=lc.ChatReply(crisis_indicators_noticed=False, response_text="Chat model reply.", referral_flag=False))
+    if fmt is lc.Closing:
+        return SimpleNamespace(output_parsed=lc.Closing(message_text="A closing line."))
+    return SimpleNamespace(output_parsed=lc.Reflection(same_concern_count=1, shift_noticed=False, response_text="Reflection.",
+                                                       session_end=False, closure_reason="none", referral_flag=False,
+                                                       crisis_indicators_noticed=False))
+
+
+settings.OPENAI_API_KEY = "test"
+fake_b = MagicMock(); fake_b.responses.parse.side_effect = b_parse
+with patch.object(lc, "_get_client", return_value=fake_b):
+    as_user(plain)
+    for jt in JOURNALS:
+        first_text = next(v["id"] for v in capture.values_for(jt) if v["control"] == "free_text")
+        u, j = drive(jt, until=first_text)
+        b["calls"].clear()
+        j = post(u + "/captures", {"value_id": first_text, "value": "I want to kill myself"})
+        check(j["crisis_event"]["tier"] == "danger" and not set(b["calls"]) & GENERATION,
+              f"{jt}: danger text -> zero generation calls (calls: {b['calls']})")
+        while j["status"] != "completed":
+            if j["pending_resume"]:
+                j = post(u + "/resume", {}); continue
+            spec = j["next_capture"]
+            j = post(u + "/captures", {"value_id": spec["value_id"], "value": default_answer(spec)})
+        check(not set(b["calls"]) & GENERATION and j["conversation_status"] == "suppressed",
+              f"{jt}: the rest of the entry makes no generation call, no offer")
+        fixed = {v["english"] for v in crisis_mod.CONTENT["danger"].values()}
+        crisis_msgs = [m["content"] for m in j["messages"] if m["kind"] == "crisis"]
+        check(len(crisis_msgs) == 1 and crisis_msgs[0] in fixed, f"{jt}: fixed crisis content in the thread, never generated")
+
+    # A user-added term inside a journal is screened the same way.
+    u, j = drive("check_in", until="triggers")
+    b["calls"].clear()
+    t = post("/libraries/triggers/terms", {"name": "kill myself", "entry_id": u.split("/")[-1]})
+    check(t["crisis_event"]["tier"] == "danger" and not set(b["calls"]) & GENERATION, "danger term -> zero generation calls")
+
+    # The model's wording: wrong value_id or a leaked label -> stored wording.
+    b["prompt"] = ("How strong is it?", "feeling_intensity")
+    u, j = drive("savouring", until="event")
+    check(j["messages"][-1]["content"] == capture.fallback_wording("savouring", "event"), "wrong value_id -> stored fallback wording")
+    b["prompt"] = ("card: soft What happened that was good?", "event")
+    j = post("/entries", {"journal_type": "savouring"})
+    check(j["messages"][-1]["content"] == "What happened that was good?", "card label stripped from capture wording")
+    b["prompt"] = ("Anything about thinking_traps or triggers today?", "event")
+    j = post("/entries", {"journal_type": "savouring"})
+    check(j["messages"][-1]["content"] == capture.fallback_wording("savouring", "event"), "internal words in the wording -> stored fallback")
+    b["prompt"] = None
+
+    # Old threads read back unchanged after the model's wording changes.
+    u, j = drive("savouring")
+    before = c.get(u).json()["messages"]
+    b["prompt"] = ("Completely different wording now.", "event")
+    after = c.get(u).json()["messages"]
+    check(before == after, "an old thread is identical after a model change")
+    b["prompt"] = None
+
+    # Abuse disclosed in a journal: not danger. Normal flow, soft card.
+    b["risk"] = "danger"
+    b["safety"] = lc.Safety(harm_type="physical_violence", timing="ongoing", danger_now="no", about="self",
+                            discloses=True, distress_now=False, asks_for_help=False)
+    u, j = drive("thought", until="situation")
+    j = post(u + "/captures", {"value_id": "situation", "value": "he hits me when he is angry"})
+    check(j["crisis_tier"] in (None, "clear") and not any(m["kind"] == "crisis" for m in j["messages"]),
+          "abuse disclosure in a journal is not danger tier")
+    check(j["messages"][-1]["kind"] == "capture_prompt" and j["messages"][-1]["card"] == "soft" and j["next_capture"],
+          "the journal goes on, with a soft helplines card under the next message")
+    b["safety"] = b["safety"].model_copy(update={"danger_now": "yes"})
+    j = post(u + "/captures", {"value_id": "automatic_thought", "value": "he will kill me tonight"})
+    check(j["crisis_event"]["tier"] == "danger", "a threat to life now stays danger")
+    b["risk"], b["safety"] = "clear", None
+
+    # Regression: AI Chat still answers danger-tier input with a model reply and a card.
+    j = post("/entries", {"journal_type": "chat"}); uc = f"/entries/{j['id']}"
+    b["calls"].clear()
+    j = post(uc + "/messages", {"content": "I want to kill myself"})
+    ai = [m for m in j["messages"] if m["role"] == "ai"][-1]
+    check(ai["content"] == "Chat model reply." and ai["card"] == "prominent" and "ChatReply" in b["calls"],
+          "AI Chat unchanged: danger input still gets the model's reply, card prominent")
+    check(j["conversation_status"] == "active", "AI Chat unchanged: the chat stays open")
+settings.OPENAI_API_KEY = None
+
+# Crisis content is byte-identical every time, over 50 events.
+as_user(new_account("b3@x.com"))
+seen_texts = {}
+for i in range(50):
+    j = post("/entries", {"journal_type": "free_write"})
+    j = post(f"/entries/{j['id']}/captures", {"value_id": "account", "value": "I want to kill myself"})
+    seen_texts.setdefault(j["crisis_event"]["variant"], set()).add(j["crisis_event"]["text"].encode("utf-8"))
+check(seen_texts.get("full") == {crisis_mod.CONTENT["danger"]["full"]["english"].encode("utf-8")}
+      and seen_texts.get("abbreviated") == {crisis_mod.CONTENT["danger"]["abbreviated"]["english"].encode("utf-8")},
+      "crisis content byte-identical across 50 events (per variant, from the content file)")
+
+# Empty answers are null; values a condition passed over are "not asked"; no bubble either way.
+as_user(plain)
+u, j = drive("check_in")
+r = rows(u)
+check(r["trigger_note"].status == "skipped" and r["trigger_note"].value is None, "empty answer stored as skipped (null)")
+check(r["feeling_intensity"].status == "not_asked" and not r["feeling_intensity"].skipped and r["feeling_intensity"].value is None,
+      "a value the schedule's condition passed over is stored as not asked, not skipped")
+check([m["value_id"] for m in j["messages"] if m["role"] == "user"] == ["mood"], "no message for an empty answer")
+check(not any("skip" in m["content"].lower() for m in j["messages"]), "no 'skip' anywhere in the thread")
+spec_c = {"id": "x", "min_mood": 1, "max_mood": 3}
+check(capture.next_value([spec_c], {"mood": 5}) is None and capture.not_asked([spec_c], {"mood": 5}) == ["x"]
+      and capture.next_value([spec_c], {"mood": 2}) == spec_c, "min_mood / max_mood condition decides whether a value is asked")
+
+# A retry saves once.
+j = post("/entries", {"journal_type": "free_write"}); uf = f"/entries/{j['id']}"
+cid = str(uuid.uuid4())
+first = post(uf + "/captures", {"value_id": "account", "value": "a long day", "more": True, "client_id": cid})
+again = post(uf + "/captures", {"value_id": "account", "value": "a long day", "more": True, "client_id": cid})
+check(sum(m["role"] == "user" for m in again["messages"]) == 1 and rows(uf)["account"].value == json.dumps("a long day"),
+      "same client_id twice -> recorded once")
+u, j = drive("thought", until="supporting_evidence")
+post(u + "/captures", {"value_id": "supporting_evidence", "value": ""})
+r2 = c.post(u + "/captures", json={"value_id": "supporting_evidence", "value": ""})
+check(r2.status_code == 200 and r2.json()["next_capture"]["value_id"] == "contradicting_evidence",
+      "retrying an answer already recorded returns the state, not an error")
+
+# Positions are 1..n in every thread.
+with S() as w:
+    by_entry = {}
+    for m in w.query(Message).all():
+        by_entry.setdefault(m.entry_id, []).append(m.sequence)
+check(all(sorted(s) == list(range(1, len(s) + 1)) for s in by_entry.values()), f"message positions sequential in all {len(by_entry)} threads")
+
+# Journal tense rule (rules only, classifier down), 12 phrases.
+down_cls = lc.Classification(domains=None, risk_tier=None)
+for text, want in [
+    ("I want to kill myself", "danger"),
+    ("I don't want to live anymore", "danger"),
+    ("I was suicidal years ago", "mild"),
+    ("My friend attempted suicide", "mild"),
+    ("I used to self harm when I was a teenager", "mild"),
+    ("I was suicidal years ago and lately it's back", "danger"),
+    ("mujhe marne ka dil karta hai", "danger"),
+    ("kuch saal pehle main khudkushi ka sochti thi", "mild"),
+    ("meri dost ne khudkushi ki koshish ki", "mild"),
+    ("ab bhi jeena nahi chahti", "danger"),
+    ("i want to kil myslef", "danger"),
+    ("i was sucidal years ago", "mild"),
+]:
+    check(crisis_mod.journal_tier(text, down_cls)[0] == want, f"journal tier {text!r} -> {want}")
+check(crisis_mod.journal_tier("I'm going to kill myself tonight", down_cls)[0] == "emergency", "a present plan stays emergency")
+check(assess_lexical("i want to kil myslef") == "clear", "AI Chat's rules unchanged (typo handling is journal-only)")
+
+# The approval marker gates releases but never reaches a prompt or the app.
+M = "DRAFT_NOT_CLINICALLY_APPROVED"
+texts = [md_loader.load_base(), md_loader.load_capture_instructions(), md_loader.load("skills", "low_mood"),
+         md_loader.load("clinical_context", "anxiety"), md_loader.load("journal_types", "thought"),
+         json.dumps(c.get("/onboarding/distress-scale").json()), c.get("/library/why-writing-helps").text]
+check(not any(M in t for t in texts), "the clinical-approval marker never reaches a prompt or a response")
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
 
 print(f"\nALL {ok} CHECKS PASSED")

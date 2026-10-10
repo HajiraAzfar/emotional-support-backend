@@ -21,7 +21,7 @@
     },
     {
       "id": "feelings",
-      "value_type": "id_set",
+      "value_type": "multi_select",
       "control": "multi_select",
       "library": "feelings",
       "prefer_valence": "positive",

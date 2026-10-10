@@ -1,10 +1,11 @@
 {
+  "_clinical_status": "DRAFT_NOT_CLINICALLY_APPROVED",
   "_comment": "Stored default wording, used ONLY when prompt generation is unavailable or fails validation (FR-ENT-023). In normal use the model words every capture prompt (FR-ENT-022).",
   "check_in": {
     "mood": "How are you feeling right now?",
-    "triggers": "Is anything in particular behind that? Pick any that fit, or skip.",
-    "trigger_note": "Would you like to say a little more about it? You can skip this too.",
-    "thinking_traps": "Did any of these thinking patterns show up? Pick any that fit, or skip.",
+    "triggers": "Is anything in particular behind that? Pick any that fit.",
+    "trigger_note": "Would you like to say a little more about it?",
+    "thinking_traps": "Did any of these thinking patterns show up? Pick any that fit.",
     "feelings": "Which feelings are here with you right now?",
     "feeling_intensity": "How strong is that, right now?"
   },
@@ -21,14 +22,14 @@
   },
   "savouring_close": "Thank you for noticing this and keeping it. Take a slow breath and let the moment stay with you a little longer.",
   "thought": {
-    "name": "What would you like to call this entry? You can skip and I'll date it.",
+    "name": "What would you like to call this entry?",
     "situation": "What was happening when the thought showed up?",
     "automatic_thought": "What was the thought, in the words it came in?",
-    "thinking_traps": "Did any of these thinking patterns show up with it? Pick any that fit, or skip.",
+    "thinking_traps": "Did any of these thinking patterns show up with it? Pick any that fit.",
     "feelings": "What did you feel in that moment?",
     "feeling_intensity": "How strong was that feeling at the time?",
-    "supporting_evidence": "What makes that thought feel true? You can skip this.",
-    "contradicting_evidence": "And is there anything that doesn't fit the thought? You can skip this too.",
+    "supporting_evidence": "What makes that thought feel true?",
+    "contradicting_evidence": "And is there anything that doesn't fit the thought?",
     "revised_thought": "Knowing all that, how would you put the thought now?"
   },
   "exposure": {

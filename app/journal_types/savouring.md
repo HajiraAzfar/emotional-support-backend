@@ -1,3 +1,7 @@
+---
+status: DRAFT_NOT_CLINICALLY_APPROVED
+---
+
 # Journal type: savouring
 
 The user is recording something good that happened, so she can hold on to it a

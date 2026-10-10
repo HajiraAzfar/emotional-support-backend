@@ -1,3 +1,7 @@
+---
+status: DRAFT_NOT_CLINICALLY_APPROVED
+---
+
 # Clinical context: depression
 
 The user told us depression is part of why they are here.

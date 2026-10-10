@@ -4,7 +4,7 @@ summary: Learn the basics of changing perspectives on a difficult thought.
 category: Thinking
 minutes: 5
 featured: true
-status: DRAFT — must be reviewed and approved by the Clinical Advisor before release
+status: DRAFT_NOT_CLINICALLY_APPROVED — must be reviewed and approved by the Clinical Advisor before release
 ---
 
 Reframing is often described as "thinking positively". It is not. It is looking at a thought the way you would look at a claim someone else made: with interest, and with the question "what is this based on?".

@@ -4,7 +4,7 @@ summary: Recognise and reframe the thought patterns that keep coming back.
 category: Thinking
 minutes: 4
 featured: true
-status: DRAFT — must be reviewed and approved by the Clinical Advisor before release
+status: DRAFT_NOT_CLINICALLY_APPROVED — must be reviewed and approved by the Clinical Advisor before release
 traps: all_or_nothing, overgeneralising, mental_filter, discounting_positives, mind_reading, fortune_telling, catastrophising, magnifying_minimising, emotional_reasoning, should_statements, labelling, personalising, blaming, comparing, what_if
 ---
 

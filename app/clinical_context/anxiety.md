@@ -1,3 +1,7 @@
+---
+status: DRAFT_NOT_CLINICALLY_APPROVED
+---
+
 # Clinical context: anxiety
 
 The user told us anxiety is part of why they are here.

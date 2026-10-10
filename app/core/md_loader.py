@@ -1,6 +1,8 @@
+import re
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent.parent
+_ECHO_LINE = re.compile(r'^Echo: "(.*)"\s*$', re.M)
 
 FOLDERS = ("clinical_context", "skills", "journal_types")
 # skills/ follows the Agent Skills layout: one folder per skill holding SKILL.md
@@ -65,6 +67,11 @@ def load(folder: str, name: str) -> str:
     return body
 
 
+def example_replies(folder: str, name: str) -> list[str]:
+    """The Echo lines of a file's examples: illustrations a reply must never copy."""
+    return _ECHO_LINE.findall(load(folder, name))
+
+
 def skill_descriptions() -> dict[str, str]:
     """
     name → description from each SKILL.md. The descriptions say when a skill
@@ -79,11 +86,11 @@ def skill_descriptions() -> dict[str, str]:
 
 
 def load_base() -> str:
-    return (APP_DIR / "base_instructions.md").read_text(encoding="utf-8").strip()
+    return _split_frontmatter((APP_DIR / "base_instructions.md").read_text(encoding="utf-8").strip())[1]
 
 
 def load_capture_instructions() -> str:
-    return (APP_DIR / "capture_instructions.md").read_text(encoding="utf-8").strip()
+    return _split_frontmatter((APP_DIR / "capture_instructions.md").read_text(encoding="utf-8").strip())[1]
 
 
 _missing = set(DOMAINS) - available("skills")

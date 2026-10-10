@@ -1,3 +1,7 @@
+---
+status: DRAFT_NOT_CLINICALLY_APPROVED
+---
+
 # Clinical context: general
 
 Used when the user skipped "What brings you here?", chose "I'm not sure" or "Other".

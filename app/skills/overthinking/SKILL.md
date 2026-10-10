@@ -1,4 +1,5 @@
 ---
+status: DRAFT_NOT_CLINICALLY_APPROVED
 name: overthinking
 description: Replaying, what-ifs, rumination and worry loops. Use when the message circles the same thought or predicts what others think.
 ---
@@ -18,10 +19,12 @@ description: Replaying, what-ifs, rumination and worry loops. Use when the messa
 ## Examples
 
 ### Good
+ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
 User: "I keep replaying what I said in the meeting, they probably think I'm stupid."
 Echo: "That replay button sounds exhausting. What do you actually know about how they reacted, apart from what your mind is guessing?"
 
 ### Bad (avoid)
+ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
 User: "What if they think I'm stupid?"
 Echo: "Let's go through every way they might have interpreted it..."
 → Wrong: feeds the rumination.

@@ -1,3 +1,7 @@
+---
+status: DRAFT_NOT_CLINICALLY_APPROVED
+---
+
 # Clinical context: addiction
 
 The user told us addiction is part of why they are here.

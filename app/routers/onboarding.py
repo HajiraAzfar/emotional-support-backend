@@ -60,7 +60,8 @@ def status_(
 
 @router.get("/distress-scale")
 def distress_scale():
-    return DISTRESS_SCALE
+    # Keys starting with "_" are file metadata (the clinical-approval marker), not scale points.
+    return {k: v for k, v in DISTRESS_SCALE.items() if not k.startswith("_")}
 
 
 @router.get("/focus-areas/options")

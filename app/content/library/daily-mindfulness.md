@@ -3,7 +3,7 @@ title: Daily mindfulness practices
 summary: Simple exercises for staying present.
 category: Coping
 minutes: 3
-status: DRAFT — must be reviewed and approved by the Clinical Advisor before release
+status: DRAFT_NOT_CLINICALLY_APPROVED — must be reviewed and approved by the Clinical Advisor before release
 ---
 
 Mindfulness has collected a lot of mystique it does not need. It means paying attention to what is happening now, on purpose, without deciding whether it is good or bad. That is the whole of it.

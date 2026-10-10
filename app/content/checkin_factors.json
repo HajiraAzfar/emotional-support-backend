@@ -1,0 +1,76 @@
+{
+  "_clinical_status": "DRAFT_NOT_CLINICALLY_APPROVED",
+  "_comment": "Daily check-in, step 2: what's behind the mood. Chips are filtered by mood (1-5); every category must have a chip at every mood, so no mood ever shows an empty list (checked at startup). Ids are stored under the check-in's `triggers` value, so ids shared with libraries/triggers.json keep old Insights history. Draft - pending clinical review.",
+  "version": "1",
+  "prompts": {
+    "high": {"en": "What was part of this mood?", "ur": "اس موڈ میں کیا کیا شامل تھا؟", "roman": "Is mood mein kya kya shaamil tha?"},
+    "mid": {"en": "What's been affecting your day?", "ur": "آج آپ کے دن پر کس چیز کا اثر رہا؟", "roman": "Aaj aap ke din par kis cheez ka asar raha?"},
+    "low": {"en": "What's feeling heavy? (pick any, or just continue)", "ur": "کیا بوجھل لگ رہا ہے؟ (جو چاہیں چنیں، یا آگے بڑھیں)", "roman": "Kya bojhal lag raha hai? (jo chahein chunein, ya aage barhein)"},
+    "note": {"en": "Anything you'd like to add?", "ur": "کچھ اور کہنا چاہیں گی؟", "roman": "Kuch aur kehna chahengi?"}
+  },
+  "categories": [
+    {"id": "people", "label": "People", "label_ur": "لوگ", "label_roman": "Log", "order": 1},
+    {"id": "work_study", "label": "Work & study", "label_ur": "کام اور پڑھائی", "label_roman": "Kaam aur parhai", "order": 2},
+    {"id": "health_body", "label": "Health & body", "label_ur": "صحت اور جسم", "label_roman": "Sehat aur jism", "order": 3},
+    {"id": "daily_life", "label": "Daily life", "label_ur": "روزمرہ زندگی", "label_roman": "Rozmarra zindagi", "order": 4},
+    {"id": "inner", "label": "Inside me", "label_ur": "میرے اندر", "label_roman": "Mere andar", "order": 5}
+  ],
+  "items": [
+    {"id": "friends", "label": "Friends", "label_ur": "دوست", "label_roman": "Dost", "category": "people", "moods": [3, 4, 5], "order": 1},
+    {"id": "family_time", "label": "Family time", "label_ur": "گھر والوں کے ساتھ وقت", "label_roman": "Ghar walon ke saath waqt", "category": "people", "moods": [3, 4, 5], "order": 2},
+    {"id": "kindness", "label": "Someone was kind", "label_ur": "کسی کی مہربانی", "label_roman": "Kisi ki meharbani", "category": "people", "moods": [4, 5], "order": 3},
+    {"id": "partner", "label": "Partner", "label_ur": "شریکِ حیات", "label_roman": "Shareek-e-hayat", "category": "people", "moods": [1, 2, 3], "order": 4},
+    {"id": "family", "label": "Family", "label_ur": "گھر والے", "label_roman": "Ghar wale", "category": "people", "moods": [1, 2, 3], "order": 5},
+    {"id": "feeling_ignored", "label": "Feeling ignored", "label_ur": "نظر انداز ہونا", "label_roman": "Nazar-andaaz hona", "category": "people", "moods": [1, 2], "order": 6},
+    {"id": "loneliness", "label": "Loneliness", "label_ur": "تنہائی", "label_roman": "Tanhai", "category": "people", "moods": [1, 2, 3], "order": 7},
+    {"id": "argument", "label": "Argument", "label_ur": "جھگڑا", "label_roman": "Jhagra", "category": "people", "moods": [1, 2], "order": 8},
+
+    {"id": "achievement", "label": "Achievement", "label_ur": "کامیابی", "label_roman": "Kamyabi", "category": "work_study", "moods": [4, 5], "order": 1},
+    {"id": "progress", "label": "Got things done", "label_ur": "کام مکمل ہوئے", "label_roman": "Kaam mukammal hue", "category": "work_study", "moods": [3, 4, 5], "order": 2},
+    {"id": "learning", "label": "Learned something", "label_ur": "کچھ نیا سیکھا", "label_roman": "Kuch naya seekha", "category": "work_study", "moods": [4, 5], "order": 3},
+    {"id": "workload", "label": "Workload", "label_ur": "کام کا بوجھ", "label_roman": "Kaam ka bojh", "category": "work_study", "moods": [1, 2, 3], "order": 4},
+    {"id": "deadline", "label": "Deadline", "label_ur": "ڈیڈ لائن", "label_roman": "Deadline", "category": "work_study", "moods": [1, 2, 3], "order": 5},
+    {"id": "boss_or_teacher", "label": "Boss or teacher", "label_ur": "باس یا استاد", "label_roman": "Boss ya ustaad", "category": "work_study", "moods": [1, 2, 3], "order": 6},
+    {"id": "exams", "label": "Exams", "label_ur": "امتحان", "label_roman": "Imtihaan", "category": "work_study", "moods": [1, 2, 3], "order": 7},
+
+    {"id": "rest", "label": "Rest", "label_ur": "آرام", "label_roman": "Aaraam", "category": "health_body", "moods": [3, 4, 5], "order": 1},
+    {"id": "health_good", "label": "Feeling healthy", "label_ur": "صحت اچھی", "label_roman": "Sehat achhi", "category": "health_body", "moods": [4, 5], "order": 2},
+    {"id": "exercise", "label": "Movement", "label_ur": "ورزش", "label_roman": "Warzish", "category": "health_body", "moods": [3, 4, 5], "order": 3},
+    {"id": "sleep", "label": "Sleep", "label_ur": "نیند", "label_roman": "Neend", "category": "health_body", "moods": [1, 2, 3], "order": 4},
+    {"id": "illness", "label": "Health worries", "label_ur": "صحت کی فکر", "label_roman": "Sehat ki fikr", "category": "health_body", "moods": [1, 2, 3], "order": 5},
+    {"id": "periods", "label": "Periods", "label_ur": "ماہواری", "label_roman": "Mahwari", "category": "health_body", "moods": [1, 2, 3], "order": 6},
+
+    {"id": "nature", "label": "Nature", "label_ur": "قدرتی ماحول", "label_roman": "Qudrati mahol", "category": "daily_life", "moods": [3, 4, 5], "order": 1},
+    {"id": "hobby", "label": "Hobby", "label_ur": "مشغلہ", "label_roman": "Mashghala", "category": "daily_life", "moods": [3, 4, 5], "order": 2},
+    {"id": "good_food", "label": "Good food", "label_ur": "اچھا کھانا", "label_roman": "Achha khana", "category": "daily_life", "moods": [4, 5], "order": 3},
+    {"id": "weather", "label": "Weather", "label_ur": "موسم", "label_roman": "Mausam", "category": "daily_life", "moods": [1, 2, 3, 4, 5], "order": 4},
+    {"id": "money", "label": "Money", "label_ur": "پیسے", "label_roman": "Paise", "category": "daily_life", "moods": [1, 2, 3], "order": 5},
+    {"id": "housework", "label": "Housework", "label_ur": "گھر کے کام", "label_roman": "Ghar ke kaam", "category": "daily_life", "moods": [1, 2, 3], "order": 6},
+    {"id": "commute", "label": "Commute", "label_ur": "آنا جانا", "label_roman": "Aana jaana", "category": "daily_life", "moods": [1, 2, 3], "order": 7},
+
+    {"id": "calm", "label": "Feeling calm", "label_ur": "سکون", "label_roman": "Sukoon", "category": "inner", "moods": [4, 5], "order": 1},
+    {"id": "gratitude", "label": "Grateful", "label_ur": "شکرگزاری", "label_roman": "Shukar-guzari", "category": "inner", "moods": [4, 5], "order": 2},
+    {"id": "a_memory", "label": "A memory", "label_ur": "کوئی یاد", "label_roman": "Koi yaad", "category": "inner", "moods": [1, 2, 3, 4, 5], "order": 3},
+    {"id": "the_future", "label": "The future", "label_ur": "مستقبل", "label_roman": "Mustaqbil", "category": "inner", "moods": [1, 2, 3], "order": 4},
+    {"id": "comparison", "label": "Comparing myself", "label_ur": "خود کا موازنہ", "label_roman": "Khud ka muwazna", "category": "inner", "moods": [1, 2], "order": 5},
+    {"id": "nothing_specific", "label": "Nothing specific", "label_ur": "کچھ خاص نہیں", "label_roman": "Kuch khaas nahi", "category": "inner", "moods": [1, 2, 3, 4, 5], "order": 6}
+  ],
+  "closings": {
+    "_comment": "Used only when the model can't write the closing. A repeat check-in gets a different line from the last one.",
+    "high": [
+      "Good to hear today went well. Hope some of it stays with you.",
+      "A good day is worth noticing. Your check-in is saved.",
+      "Glad today felt good. Enjoy the rest of it."
+    ],
+    "mid": [
+      "Thanks for checking in. Your answers are saved.",
+      "An in-between kind of day. Your check-in is saved.",
+      "Noted for today. Come back whenever you like."
+    ],
+    "low": [
+      "Today sounds heavy. Your check-in is saved.",
+      "That's a hard day to carry. You don't have to do anything more with it right now.",
+      "Some days weigh more than others. This one is saved, and you can come back to it whenever you want."
+    ]
+  }
+}

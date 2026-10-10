@@ -4,7 +4,7 @@ summary: Track and cope with distress when it is high.
 category: Coping
 minutes: 4
 featured: true
-status: DRAFT — must be reviewed and approved by the Clinical Advisor before release
+status: DRAFT_NOT_CLINICALLY_APPROVED — must be reviewed and approved by the Clinical Advisor before release
 ---
 
 Distress is uncomfortable, not dangerous. It rises, it peaks, and — if nothing is added to it — it comes down on its own. That is worth knowing in advance, because in the middle of it the mind is certain it will not come down.

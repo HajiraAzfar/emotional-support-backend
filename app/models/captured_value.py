@@ -14,4 +14,8 @@ class CapturedValue(Base):
     # JSON-encoded typed value: integer, list of library ids, or text (FR-ENT-018).
     value = Column(Text, nullable=True)
     skipped = Column(Boolean, default=False, nullable=False)
+    # answered | skipped (asked, left empty: value null) | not_asked (the schedule's
+    # condition left it out, e.g. intensity with no feelings named). Insights reads
+    # only answered values, and can tell "left empty" from "never asked".
+    status = Column(String(10), default="answered", nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)

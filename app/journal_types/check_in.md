@@ -1,3 +1,7 @@
+---
+status: DRAFT_NOT_CLINICALLY_APPROVED
+---
+
 # Journal type: check-in
 
 A short daily pulse-check. The user has just recorded their mood, what might be

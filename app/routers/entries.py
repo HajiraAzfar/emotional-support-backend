@@ -19,18 +19,23 @@ Every action inside an entry returns the whole entry (EntryStepOut) so the
 client re-renders the thread from one source of truth.
 
 Crisis: every free-text value is screened before it reaches any generated
-output. A danger or emergency tier stops every AI call for that entry; the
-entry itself can still be completed (FR-CRIS-004, 006, 007).
+output. In a journal, a danger or emergency tier stops every AI call for that
+entry; the entry itself can still be completed (FR-CRIS-004, 006, 007). AI Chat
+keeps talking: the safety check (crisis.triage) runs before the skill is chosen,
+and a helplines card (the reply's own `card` field) goes under Echo's reply, never
+instead of it and never in its text.
 """
 import json
+import logging
+import re
 import uuid
 from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
-from sqlalchemy import or_, select
+from sqlalchemy import func, or_, select
 from sqlalchemy.orm import Session
 
-from app.core import capture, context_builder, crisis, enforcement, language, llm_client
+from app.core import capture, context_builder, crisis, enforcement, language, llm_client, md_loader
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
@@ -43,6 +48,8 @@ from app.models.message import Message
 from app.models.user_term import UserTerm
 from app.schemas.entry import (
     CaptureAnswer,
+    CheckInCreate,
+    CheckInOut,
     ConversationChoice,
     EntryCreate,
     EntryOut,
@@ -52,6 +59,7 @@ from app.schemas.entry import (
 from app.schemas.message import MessageCreate
 
 router = APIRouter(prefix="/entries", tags=["entries"])
+logger = logging.getLogger(__name__)
 
 REPLY_UNAVAILABLE = (
     "I couldn't reply just now. What you wrote is saved — you can send another "
@@ -77,15 +85,23 @@ def _messages(db: Session, entry: Entry) -> list[Message]:
     ).order_by(Message.sequence).all()
 
 
-def _add_message(db: Session, entry: Entry, role: str, kind: str, content: str, value_id: str | None = None) -> Message:
-    last = db.query(Message).filter(Message.entry_id == entry.id).count()
+def _add_message(
+    db: Session, entry: Entry, role: str, kind: str, content: str,
+    value_id: str | None = None, card: str | None = None, client_id: uuid.UUID | None = None,
+) -> Message:
+    # The entry row is locked for the rest of the transaction, so two requests
+    # can't take the same position (positions are unique per thread).
+    db.query(Entry.id).filter(Entry.id == entry.id).with_for_update().first()
+    last = db.query(func.max(Message.sequence)).filter(Message.entry_id == entry.id).scalar() or 0
     message = Message(
         entry_id=entry.id,
         role=role,
         kind=kind,
         value_id=value_id,
         content=content,
+        card=card,
         sequence=last + 1,
+        client_id=client_id,
     )
     db.add(message)
     db.flush()
@@ -190,7 +206,8 @@ def _state(db: Session, entry: Entry, account: Account, crisis_event: crisis.Cri
             next_capture = capture.spec_out(spec)
 
     support_note = None
-    if entry.status == "completed" and entry.crisis_tier == "mild":
+    # AI Chat shows help through the card rules instead (crisis.card_for).
+    if entry.status == "completed" and entry.crisis_tier == "mild" and entry.journal_type != context_builder.CHAT:
         support_note = crisis.mild_reference()
 
     out = EntryOut.model_validate(entry, from_attributes=True).model_dump(
@@ -215,6 +232,7 @@ def _screen(
     field: str,
     text: str,
     history: list[tuple[str, str]],
+    lang: str = language.ENGLISH,
 ) -> tuple[crisis.CrisisResult | None, llm_client.Classification]:
     """
     FR-CRIS-001/002: screen one free-text value before it reaches any generated
@@ -227,21 +245,74 @@ def _screen(
         classification = llm_client.classify(history, text, account.work_issues)
 
     tier = crisis.assess(text, classification.risk_tier)
-    result = crisis.record(db, account.id, entry, field, tier)
-    if result and result.text:
+    result = crisis.record(db, account.id, entry, field, tier, lang)
+    # AI Chat puts no fixed text in the thread: the card goes under Echo's own reply.
+    if result and result.text and _journal_type(entry) != context_builder.CHAT:
         _add_message(db, entry, "ai", "crisis", result.text)
     return result, classification
 
 
-def _ask_next(db: Session, entry: Entry, account: Account, previous_answer: str | None, resuming: bool = False) -> None:
+def _screen_journal(
+    db: Session,
+    account: Account,
+    entry: Entry,
+    field: str,
+    text: str,
+    history: list[tuple[str, str]],
+    lang: str = language.ENGLISH,
+) -> tuple[crisis.CrisisResult | None, llm_client.Classification, str | None]:
+    """
+    Journals only (AI Chat uses _screen): screen free text before anything else
+    reads it. The classifier may read it; the tier then follows the journal rules
+    (crisis.journal_tier). Danger and emergency add fixed content and stop every
+    generation call for the entry (crisis.suppressed). Returns the event, the
+    classification and a helplines card for the next message, if any.
+    """
+    if crisis.suppressed(entry):
+        classification = llm_client.Classification(domains=None, risk_tier=None)
+    else:
+        classification = llm_client.classify(history, text, account.work_issues)
+    tier, card = crisis.journal_tier(text, classification)
+    result = crisis.record(db, account.id, entry, field, tier, lang)
+    if result and result.text:
+        _add_message(db, entry, "ai", "crisis", result.text)
+    return result, classification, card
+
+
+def _card_due(db: Session, entry: Entry, safety, level: str | None) -> str | None:
+    """
+    AI Chat: the helplines card for this reply (soft | prominent), or None. Shown once;
+    again only when she asks for help or it becomes prominent (rules: crisis.card_for).
+    """
+    card = crisis.card_for(level, safety)
+    if card is None:
+        return None
+    last = db.query(Message.card).filter(
+        Message.entry_id == entry.id, Message.card.isnot(None)
+    ).order_by(Message.sequence.desc()).first()
+    if last is None or (safety is not None and safety.asks_for_help) or (card == "prominent" and last.card == "soft"):
+        return card
+    return None
+
+
+def _ask_next(
+    db: Session, entry: Entry, account: Account, previous_answer: str | None,
+    resuming: bool = False, card: str | None = None,
+) -> None:
     """
     Adds the next capture prompt, or — when every value is recorded — completes
-    the entry and adds the conversation offer.
+    the entry and adds the conversation offer. `card`: a helplines card to draw
+    under that next message (a disclosure in the answer just given).
     """
     journal_type = _journal_type(entry)
     focus_codes = _focus_codes(db, account)
     values = capture.values_for(journal_type, focus_codes)
     recorded = _recorded(db, entry)
+    # Values the conditions passed over are stored as not asked, never as skipped.
+    for value_id in capture.not_asked(values, recorded):
+        db.add(CapturedValue(entry_id=entry.id, key=value_id, value=None, skipped=False, status="not_asked"))
+        recorded[value_id] = None
+    db.flush()
     spec = capture.next_value(values, recorded)
 
     if spec is None:
@@ -250,27 +321,27 @@ def _ask_next(db: Session, entry: Entry, account: Account, previous_answer: str 
         entry.completed_at = datetime.utcnow()
         if crisis.suppressed(entry):
             entry.conversation_status = "suppressed"
-            _add_message(db, entry, "ai", "notice", capture.FALLBACKS["saved"])
+            _add_message(db, entry, "ai", "notice", capture.FALLBACKS["saved"], card=card)
         else:
             ending = capture.ending_for(journal_type, focus_codes)
             if ending == "close":
                 # FR-JRN-002: one closing message, no further value, no conversation.
                 entry.conversation_status = "closed"
                 entry.closure_reason = "journal_complete"
-                _add_message(db, entry, "ai", "closing", _closing_text(db, entry, account, values, recorded))
+                _add_message(db, entry, "ai", "closing", _closing_text(db, entry, account, values, recorded), card=card)
             elif ending == "grounding":
                 # FR-JRN-005: the trauma variant ends here, without a conversation.
                 entry.conversation_status = "closed"
                 entry.closure_reason = "journal_complete"
             else:
                 entry.conversation_status = "offered"
-                _add_message(db, entry, "ai", "offer", capture.FALLBACKS["offer"])
-        _maybe_ground(db, entry, journal_type, focus_codes)
+                _add_message(db, entry, "ai", "offer", capture.FALLBACKS["offer"], card=card)
+        _maybe_ground(db, entry, journal_type, focus_codes, card=card)
         return
 
     if not resuming and _pause_due(values, recorded, spec):
         # FR-JRN-006: the rest of this entry belongs to after she has done it.
-        _add_message(db, entry, "ai", "pause", capture.pause_message())
+        _add_message(db, entry, "ai", "pause", capture.pause_message(), card=card)
         return
 
     result = None
@@ -285,11 +356,24 @@ def _ask_next(db: Session, entry: Entry, account: Account, previous_answer: str 
         )
         result = llm_client.generate_capture_prompt(prompt, spec["id"])
 
-    text = result.message_text if result else capture.fallback_wording(journal_type, spec["id"])
-    _add_message(db, entry, "ai", "capture_prompt", text, value_id=spec["id"])
+    # The control comes from the schedule; the words must carry nothing internal.
+    text = enforcement.strip_card_labels(result.message_text) if result else ""
+    if not text or _leaks(text):
+        text = capture.fallback_wording(journal_type, spec["id"])
+    _add_message(db, entry, "ai", "capture_prompt", text, value_id=spec["id"], card=card)
 
 
-def _maybe_ground(db: Session, entry: Entry, journal_type: str, focus_codes: list[str]) -> None:
+# Words that only exist inside the app: value ids, empty-answer labels, tags.
+_INTERNAL = re.compile(
+    r"\b(" + "|".join(re.escape(v) for v in capture.all_value_ids() if "_" in v)
+    + r"|triggers?|skipped|skip|not_asked|value_id|referral_flag)\b|</?user_text>", re.I)
+
+
+def _leaks(text: str) -> bool:
+    return bool(_INTERNAL.search(text))
+
+
+def _maybe_ground(db: Session, entry: Entry, journal_type: str, focus_codes: list[str], card: str | None = None) -> None:
     """
     FR-JRN-008: for users with the past-event focus area, the thread's final
     message is the fixed grounding message. Added once, when the thread ends.
@@ -300,7 +384,7 @@ def _maybe_ground(db: Session, entry: Entry, journal_type: str, focus_codes: lis
         return
     if db.query(Message).filter(Message.entry_id == entry.id, Message.kind == "grounding").count():
         return
-    _add_message(db, entry, "ai", "grounding", capture.grounding_message())
+    _add_message(db, entry, "ai", "grounding", capture.grounding_message(), card=card)
 
 
 def _closing_text(db: Session, entry: Entry, account: Account, values: list[dict], recorded: dict) -> str:
@@ -388,13 +472,26 @@ def _chat_reply(
     history: list[tuple[str, str]],
     text: str,
     domains: list[str] | None,
+    safety=None,
+    level: str | None = None,
+    card: str | None = None,
 ) -> enforcement.Outcome:
     """
     AI Chat: chat prompt → reply → enforcement. No entry summary and no closure
     rules; only the containment failsafe ends a chat (FR-AIR-013). Raises LLMError.
     """
     domains = domains or entry.domains or ["general"]
+    skill = crisis.SKILL_FOR_HARM.get(safety.harm_type) if safety else None
+    if skill:
+        # The safety check chooses the skill, so a topic miss can't skip it.
+        domains = [skill] + [d for d in domains if d != skill]
     entry.domains = domains
+    # Once she said she is safe, or Echo asked, the question is not asked again
+    # (unless danger is now: tier 1 asks directly).
+    settled = enforcement.safety_settled(history, text)
+    # Content-free (FR-CRIS-013): which skill, triage and card this reply used.
+    logger.info("chat reply entry=%s skill=%s triage=%s card=%s safety_settled=%s safety=%s",
+                entry.id, domains[0], level, card, settled, safety.model_dump() if safety else None)
     user_texts = [c for role, c in history if role == "user"] + [text]
     limit = capture.conversation_limits(context_builder.CHAT)["containment_turns"]
     closing = sum(1 for role, _ in history if role == "ai") >= (limit or settings.CONVERSATION_CONTAINMENT_TURNS)
@@ -404,9 +501,24 @@ def _chat_reply(
         domains,
         reply_language=language.reply_language(user_texts),
         closing=closing,
+        level=level,
+        safety=safety,
+        card=card,
+        safety_settled=settled,
     )
+    # Examples are illustrations: a reply must not reuse their sentences, nor its own earlier ones.
+    seen = ([c for role, c in history if role == "ai"]
+            + md_loader.example_replies("journal_types", context_builder.CHAT)
+            + md_loader.example_replies("skills", domains[0]))
     reply = llm_client.generate_chat_reply(system_prompt, history, text)
-    return enforcement.enforce_chat(reply, closing=closing)
+    copied = enforcement.repeated_sentences(reply.response_text, seen)
+    if copied:
+        # A reply that echoes an example reads like a script: one fresh try.
+        rewrite = ("\n\n# Rewrite\nYour draft reused these sentences word for word. Say it in "
+                   "new words:\n" + "\n".join(f"- {s}" for s in copied))
+        reply = llm_client.generate_chat_reply(system_prompt + rewrite, history, text)
+    return enforcement.enforce_chat(reply, closing=closing, seen=seen,
+                                    no_safety_question=settled and level != crisis.TIER1)
 
 
 def _suppress_conversation(db: Session, entry: Entry, account: Account) -> None:
@@ -572,6 +684,148 @@ def create_entry(
     return _state(db, entry, account)
 
 
+# ---------- daily check-in ----------
+# The app owns the steps (mood → what's behind it → note) and sends everything
+# once. Only the closing reply is written by the model. An empty step is just
+# empty: no row, no message, nothing said about it.
+
+CHECK_IN = "check_in"
+LOW_STREAK = 3  # this many low check-ins in a row → a soft pointer to Chat
+
+
+@router.get("/check_in/factors")
+def check_in_factors(
+    mood: int = Query(ge=1, le=5),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_user),
+):
+    """The chips for this mood, her own words first, and the step's fixed wording."""
+    terms = db.query(UserTerm).filter(
+        UserTerm.account_id == account.id, UserTerm.library == "triggers"
+    ).order_by(UserTerm.created_at).all()
+    return capture.checkin_factors(mood, [{"id": t.item_id, "name": t.name} for t in terms])
+
+
+def _check_in_recorded(mood: int, factor_names: list[str], note: str) -> str:
+    """What the model reads: plain labels, and only what she actually gave."""
+    label = next(o["label"] for o in capture.SCALES["mood_5"] if o["value"] == mood)
+    lines = [f"- Mood: {mood} ({label}) on a 1-5 scale"]
+    if factor_names:
+        lines.append(f"- What was part of it: {', '.join(factor_names)}")
+    if note:
+        lines.append(f"- Her note: <user_text>{note}</user_text>")
+    return "\n".join(lines)
+
+
+def _recent_closings(db: Session, account: Account, limit: int = 3) -> list[str]:
+    rows = db.query(Message.content).join(Entry, Entry.id == Message.entry_id).filter(
+        Entry.account_id == account.id, Entry.journal_type == CHECK_IN, Message.kind == "closing"
+    ).order_by(Message.created_at.desc()).limit(limit).all()
+    return [r.content for r in rows]
+
+
+def _low_streak(db: Session, account: Account) -> bool:
+    ids = [e.id for e in db.query(Entry.id).filter(
+        Entry.account_id == account.id,
+        Entry.journal_type.in_((CHECK_IN, "checkin")),
+        Entry.status == "completed",
+    ).order_by(Entry.completed_at.desc()).limit(LOW_STREAK).all()]
+    if len(ids) < LOW_STREAK:
+        return False
+    moods = [json.loads(v.value) for v in db.query(CapturedValue).filter(
+        CapturedValue.entry_id.in_(ids), CapturedValue.key == "mood"
+    ).all()]
+    return len(moods) == LOW_STREAK and all(m <= 2 for m in moods)
+
+
+def _check_in_out(db: Session, entry: Entry, account: Account, event: crisis.CrisisResult | None = None) -> CheckInOut:
+    closing = db.query(Message).filter(
+        Message.entry_id == entry.id, Message.kind == "closing"
+    ).order_by(Message.sequence.desc()).first()
+    return CheckInOut(
+        entry_id=entry.id,
+        closing=closing.content if closing else "",
+        card=closing.card if closing else None,
+        crisis_event=event.as_dict() if event else None,
+        suggest="chat" if _low_streak(db, account) else None,
+    )
+
+
+@router.post("/check_in", response_model=CheckInOut, status_code=status.HTTP_201_CREATED)
+def submit_check_in(
+    payload: CheckInCreate,
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_user),
+):
+    existing = db.query(Entry).filter(Entry.client_id == payload.client_id).first()
+    if existing:
+        if existing.account_id != account.id:
+            raise HTTPException(status_code=409, detail="Please try again")
+        # A retry of one already saved: same entry, same reply.
+        return _check_in_out(db, existing, account)
+
+    names = capture._names("triggers", _user_terms(db, account))
+    factors = list(dict.fromkeys(payload.factors))
+    unknown = [f for f in factors if f not in names]
+    if unknown:
+        raise HTTPException(status_code=422, detail=f"Unknown options: {unknown}")
+    note = payload.note.strip()
+    factor_names = [names[f] for f in factors]
+
+    # Saved before any screening or model call, so nothing she gave can be lost.
+    now = datetime.utcnow()
+    entry = Entry(account_id=account.id, journal_type=CHECK_IN, status="completed", started_at=now,
+                  completed_at=now, conversation_status="closed", closure_reason="journal_complete",
+                  client_id=payload.client_id)
+    db.add(entry)
+    db.flush()
+    label = next(o["label"] for o in capture.SCALES["mood_5"] if o["value"] == payload.mood)
+    for key, value, shown in (("mood", payload.mood, f"{payload.mood} — {label}"),
+                              ("triggers", factors, ", ".join(factor_names)),
+                              ("trigger_note", note, note)):
+        if value:
+            db.add(CapturedValue(entry_id=entry.id, key=key, value=json.dumps(value, ensure_ascii=False), skipped=False))
+            _add_message(db, entry, "user", "capture_answer", shown, value_id=key)
+    db.commit()
+
+    # The note is screened like every journal's free text. Danger or emergency:
+    # fixed content, the card, and no model writes anything (FR-CRIS-006/007).
+    event = card = None
+    lang = language.reply_language([note] if note else [])
+    if note:
+        classification = llm_client.classify([], note, account.work_issues)
+        tier, card = crisis.journal_tier(note, classification)
+        event = crisis.record(db, account.id, entry, "trigger_note", tier, lang)
+    if event is not None and event.text:
+        _add_message(db, entry, "ai", "closing", event.text, card="prominent")
+        logger.info("check-in reply entry=%s step=closing skill=none source=crisis_content tier=%s", entry.id, event.tier)
+        db.commit()
+        db.refresh(entry)
+        return _check_in_out(db, entry, account, event)
+
+    level = safety = None
+    recent = _recent_closings(db, account)
+    prompt = context_builder.build_checkin_closing_prompt(
+        _focus_codes(db, account), _check_in_recorded(payload.mood, factor_names, note),
+        lang, recent, level=level, safety=safety, card=card,
+    )
+    text = llm_client.generate_closing(prompt)
+    if text:
+        text = enforcement.limit_questions(enforcement.strip_card_labels(text), allowed=1)
+        seen = recent + md_loader.example_replies("skills", CHECK_IN)
+        if not text or text in recent or enforcement.repeated_sentences(text, seen):
+            text = None
+    source = "model" if text else "fallback"
+    text = text or capture.checkin_fallback_closing(payload.mood, recent)
+    _add_message(db, entry, "ai", "closing", text, card=card)
+    # Content-free (FR-CRIS-013): which step and skill wrote the reply, and the safety outcome.
+    logger.info("check-in reply entry=%s step=closing skill=check_in source=%s triage=%s card=%s",
+                entry.id, source, level, card)
+    db.commit()
+    db.refresh(entry)
+    return _check_in_out(db, entry, account, event)
+
+
 @router.post("/{entry_id}/resume", response_model=EntryStepOut)
 def resume_entry(
     entry_id: uuid.UUID,
@@ -644,6 +898,18 @@ def submit_capture(
 ):
     entry = _get_entry(db, entry_id, account)
     journal_type = _journal_type(entry)
+    values = _values(db, entry, account)
+
+    # A retry of an answer already recorded (the response was lost): the same
+    # state back, nothing saved twice, no error for her to read.
+    repeatable = {v["id"] for v in values if v.get("repeatable")}
+    already = payload.value_id in _recorded(db, entry) and payload.value_id not in repeatable
+    seen = payload.client_id is not None and db.query(Message.id).filter(
+        Message.entry_id == entry.id, Message.client_id == payload.client_id
+    ).first() is not None
+    if already or seen:
+        return _state(db, entry, account)
+
     if entry.status != "in_progress" or not capture.has_schedule(journal_type):
         raise HTTPException(status_code=409, detail="This entry is not collecting values")
     # FR-JRN-007: nothing is collected until the scope notice is acknowledged.
@@ -657,7 +923,7 @@ def submit_capture(
     # A repeatable value (free write) stays open across several messages, so it
     # is "unrecorded" until she says she is done.
     open_value = _open_value(db, entry, account)
-    spec = open_value or capture.next_value(_values(db, entry, account), _recorded(db, entry))
+    spec = open_value or capture.next_value(values, _recorded(db, entry))
     if spec is None or spec["id"] != payload.value_id:
         raise HTTPException(status_code=409, detail=f"Expected value: {spec['id'] if spec else 'none'}")
 
@@ -665,6 +931,9 @@ def submit_capture(
     row = _value_row(db, entry, spec["id"]) if spec.get("repeatable") else None
     finishing = bool(spec.get("repeatable")) and not payload.more
 
+    # FR-ENT-003 / FR-ENT-005: persist the answer before crisis detection or any AI call.
+    # An empty answer is stored as skipped (null) and gets no message: nothing
+    # in the thread, and nothing the model reads, says she left it empty.
     if row is not None and finishing and not payload.value:
         # "Done writing" on what she has already sent: nothing new to record.
         value, shown = json.loads(row.value), None
@@ -674,26 +943,24 @@ def submit_capture(
         except capture.InvalidAnswer as exc:
             raise HTTPException(status_code=422, detail=str(exc))
         shown = capture.display_text(spec, value, extra)
-
-    # FR-ENT-003 / FR-ENT-005: persist the answer before crisis detection or any AI call.
-    if shown is not None:
         if row is not None and value is not None:
             # Same value, another message: keep them together as one account.
-            value = f"{json.loads(row.value)}\n\n{value}"
-            row.value = json.dumps(value, ensure_ascii=False)
-        else:
+            row.value = json.dumps(f"{json.loads(row.value)}\n\n{value}", ensure_ascii=False)
+        elif row is None:
             db.add(CapturedValue(
                 entry_id=entry.id,
                 key=spec["id"],
                 value=None if value is None else json.dumps(value, ensure_ascii=False),
                 skipped=value is None,
+                status="skipped" if value is None else "answered",
             ))
-        _add_message(db, entry, "user", "capture_answer", shown, value_id=spec["id"])
+        if shown is not None:
+            _add_message(db, entry, "user", "capture_answer", shown, value_id=spec["id"], client_id=payload.client_id)
     db.commit()
 
-    event = None
-    if shown is not None and spec["control"] == "free_text" and value is not None:
-        event, _ = _screen(db, account, entry, spec["id"], shown, history=[])
+    event = card = None
+    if shown is not None and spec["control"] == "free_text":
+        event, _, card = _screen_journal(db, account, entry, spec["id"], shown, history=[])
 
     if spec.get("repeatable") and payload.more:
         # She is still writing: no new prompt, the same value stays open.
@@ -701,7 +968,8 @@ def submit_capture(
         db.refresh(entry)
         return _state(db, entry, account, crisis_event=event)
 
-    _ask_next(db, entry, account, previous_answer=f"{spec['id']} = {shown or 'written'}")
+    previous = None if value is None else f"{spec['id']} = {shown or 'written'}"
+    _ask_next(db, entry, account, previous_answer=previous, card=card)
     db.commit()
     db.refresh(entry)
     return _state(db, entry, account, crisis_event=event)
@@ -786,13 +1054,25 @@ def add_message(
         entry.completed_at = datetime.utcnow()
     db.commit()
 
-    event, classification = _screen(db, account, entry, "chat", text, history)
+    lang = language.reply_language([c for role, c in history if role == "user"] + [text])
+    journal_card = None
+    if is_chat:
+        event, classification = _screen(db, account, entry, "chat", text, history, lang)
+    else:
+        event, classification, journal_card = _screen_journal(db, account, entry, "chat", text, history, lang)
     if crisis.suppressed(entry):
-        # FR-CRIS-006/007: no further generation for this entry.
+        # FR-CRIS-006/007: no further generation for this entry (journals; see crisis.suppressed).
         _suppress_conversation(db, entry, account)
         db.commit()
         db.refresh(entry)
         return _state(db, entry, account, crisis_event=event, referral=True)
+
+    # Always-on safety check, before the skill is chosen: a topic miss can't skip it.
+    safety = classification.safety
+    level = crisis.triage(event.tier if event else "clear", safety)
+    if is_chat and level == crisis.TIER1 and entry.crisis_tier not in crisis.SUPPRESSING_TIERS:
+        event = crisis.record(db, account.id, entry, "triage", "danger", lang)  # content-free record
+    card = _card_due(db, entry, safety, level) if is_chat else journal_card
 
     if payload.more:
         # FR-JRN-003 in the conversation: she is still writing. The message is
@@ -804,22 +1084,32 @@ def add_message(
 
     try:
         if is_chat:
-            outcome = _chat_reply(db, entry, account, history, text, classification.domains)
+            outcome = _chat_reply(db, entry, account, history, text, classification.domains, safety, level, card)
         else:
             outcome = _reflect(db, entry, account, history, text, classification.domains)
     except llm_client.LLMError:
-        _add_message(db, entry, "ai", "notice", REPLY_UNAVAILABLE)
+        # A blocked or failed reply to a disclosure must not read like a shrug.
+        disclosed = safety is not None and safety.harm_type in crisis.SKILL_FOR_HARM
+        _add_message(db, entry, "ai", "notice",
+                     crisis.pick(crisis.CONTENT["support_unavailable"], lang) if disclosed else REPLY_UNAVAILABLE,
+                     card=card)
         db.commit()
         db.refresh(entry)
         return _state(db, entry, account, crisis_event=event)
 
-    if outcome.crisis:
+    if outcome.crisis and not is_chat:
         # The model noticed risk the rules missed: its reply is replaced by fixed content.
-        event = crisis.record(db, account.id, entry, "model", "danger")
+        event = crisis.record(db, account.id, entry, "model", "danger", lang)
         _add_message(db, entry, "ai", "crisis", event.text)
         _suppress_conversation(db, entry, account)
     else:
-        _add_message(db, entry, "ai", "chat", outcome.reply_text)
+        if is_chat and outcome.crisis:
+            # AI Chat: the reply stays, and the card under it turns prominent.
+            if entry.crisis_tier not in crisis.SUPPRESSING_TIERS:
+                event = crisis.record(db, account.id, entry, "model", "danger", lang)
+            card = _card_due(db, entry, safety, crisis.TIER1) or card
+        # The card rides on the reply in its own field: drawn under it, never part of its text.
+        _add_message(db, entry, "ai", "chat", outcome.reply_text, card=card)
         _apply_close(db, entry, account, outcome)
     db.commit()
     db.refresh(entry)

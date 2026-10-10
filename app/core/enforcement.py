@@ -16,10 +16,11 @@ MINIMAL_REPLIES = 2
 # turn after she moves, then the closing message.
 EXPLORING, CONFIRMING = "exploring", "confirming"
 
-_SENTENCE_SPLIT = re.compile(r"(?<=[.!?؟])\s+")
+_SENTENCE_SPLIT = re.compile(r"(?<=[.!?؟])(?<!\d\.)\s+|\n")
 # The same split, keeping what separated the sentences (a space, or the line
-# break before a numbered idea) so a trimmed reply keeps its shape.
-_SENTENCE_SPLIT_KEEP = re.compile(r"(?<=[.!?؟])(\s+)")
+# break before a numbered idea) so a trimmed reply keeps its shape. A list
+# number ("3.") is not a sentence end, so dropping a question takes its number with it.
+_SENTENCE_SPLIT_KEEP = re.compile(r"((?<=[.!?؟])(?<!\d\.)\s+|\n\s*)")
 
 
 @dataclass
@@ -124,6 +125,58 @@ def limit_questions(text: str, allowed: int) -> str:
     return result or text
 
 
+def _sentences(text: str) -> list[str]:
+    return [s.strip() for s in _SENTENCE_SPLIT.split(text) if s.strip()]
+
+
+def drop_sentences(text: str, drop) -> str:
+    """Remove the sentences `drop` matches, keeping the rest and its line breaks; the original if nothing would remain."""
+    parts = _SENTENCE_SPLIT_KEEP.split(text)
+    sentences, separators = parts[0::2], parts[1::2] + [""]
+    kept = "".join(s + sep for s, sep in zip(sentences, separators) if not drop(s.strip())).strip()
+    return kept or text
+
+
+# The card travels in its own field. A reply that is nothing but a card label, or
+# carries one as a tag ("card: soft"), is a leak; "a soft voice" is just English.
+_CARD_LABEL_LINE = re.compile(r"^\W*(none|soft|prominent|urgent)\W*$", re.I | re.M)
+_CARD_TAG = re.compile(r"[\[(<{]?\bcard\s*[:=]\s*\w+[\])>}]?", re.I)
+
+
+def strip_card_labels(text: str) -> str:
+    return _CARD_TAG.sub("", _CARD_LABEL_LINE.sub("", text)).strip()
+
+
+def _norm(sentence: str) -> str:
+    return " ".join(re.sub(r"[^\w\s]", "", sentence.lower()).split())
+
+
+# "I'm here." may come back; a whole line lifted from an example or an earlier reply may not.
+MIN_REPEAT_WORDS = 5
+
+
+def repeated_sentences(text: str, seen: list[str]) -> list[str]:
+    """Sentences of `text` found word for word in `seen` (skill examples, earlier replies)."""
+    known = {_norm(s) for t in seen for s in _sentences(t)}
+    return [s for s in _sentences(text) if len(_norm(s).split()) >= MIN_REPEAT_WORDS and _norm(s) in known]
+
+
+_SAFETY_WORDS = re.compile(r"\b(safe|mehfooz|mehfuz|in contact|contact with)\b", re.I)
+# Her own words that she is safe or out of it ("I am safe now", "I'm out of that marriage").
+_SAID_SAFE = re.compile(r"\b(i am|i'm|im|i m)\s+(now\s+)?(safe|out of)\b|\bmehf[uo]o?z\s+(hun|hoon|hu|hn)\b", re.I)
+
+
+def is_safety_question(sentence: str) -> bool:
+    return sentence.rstrip().endswith(("?", "؟")) and bool(_SAFETY_WORDS.search(sentence))
+
+
+def safety_settled(history: list[tuple[str, str]], text: str) -> bool:
+    """Echo already asked whether she is safe, or she said so herself: don't ask again."""
+    asked = any(role == "ai" and any(is_safety_question(s) for s in _sentences(c)) for role, c in history)
+    said = any(_SAID_SAFE.search(c) for role, c in history if role == "user") or bool(_SAID_SAFE.search(text))
+    return asked or said
+
+
 def enforce(
     reflection: Reflection,
     forced_closure: str | None = None,
@@ -173,15 +226,27 @@ def enforce(
     )
 
 
-def enforce_chat(reply: ChatReply, closing: bool = False) -> Outcome:
+def enforce_chat(
+    reply: ChatReply,
+    closing: bool = False,
+    seen: list[str] | None = None,
+    no_safety_question: bool = False,
+) -> Outcome:
     """
     AI Chat: the same last word as enforce(), without the journal's closure
     rules — she ends a chat by starting a new one. Only the containment
-    failsafe closes it (`closing`), and risk is never cleared.
+    failsafe closes it (`closing`), and risk is never cleared. Also: no card
+    label in the text, no sentence lifted from `seen`, and no safety question
+    once that is settled.
     """
     crisis = reply.crisis_indicators_noticed
     session_end = closing and not crisis
-    text = reply.response_text.strip() or "I'm here. Tell me more?"
+    text = strip_card_labels(reply.response_text) or "I'm here. Tell me more?"
+    if seen:
+        copied = set(repeated_sentences(text, seen))
+        text = drop_sentences(text, lambda s: s in copied)
+    if no_safety_question:
+        text = drop_sentences(text, is_safety_question)
     text = limit_questions(text, allowed=0 if session_end else 1)
     if not session_end:
         text = drop_recap_opener(text)

@@ -16,7 +16,7 @@ from fastapi import APIRouter
 
 router = APIRouter(prefix="/crisis", tags=["crisis"])
 
-_CONTENT_PATH = Path(__file__).resolve().parent.parent / "content" / "crisis_resources.json"
+_CONTENT_PATH = Path(__file__).resolve().parent.parent / "config" / "helplines.json"
 
 
 @router.get("/resources")

@@ -27,5 +27,8 @@ class Entry(Base):
     parent_entry_id = Column(UUID(as_uuid=True), ForeignKey("entries.id", ondelete="SET NULL"), nullable=True)
     # FR-JRN-007: the scope notice must be acknowledged before the first value is requested.
     notice_acknowledged = Column(Boolean, default=False, nullable=False)
+    # Daily check-in: the id the app made for this check-in, so a retry after a
+    # lost response returns the same entry instead of saving it twice.
+    client_id = Column(UUID(as_uuid=True), nullable=True, unique=True)
     started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)

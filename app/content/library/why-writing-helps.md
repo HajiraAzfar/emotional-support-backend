@@ -3,7 +3,7 @@ title: Why writing it down helps
 summary: What happens when a thought moves from your head to a page.
 category: Journalling
 minutes: 3
-status: DRAFT — must be reviewed and approved by the Clinical Advisor before release
+status: DRAFT_NOT_CLINICALLY_APPROVED — must be reviewed and approved by the Clinical Advisor before release
 ---
 
 A worry in the head has no edges. It repeats, it grows, and it borrows from every other worry nearby. The same worry written down has a beginning and an end. It turns out to be one sentence long, and it is easier to look at a sentence than at a fog.

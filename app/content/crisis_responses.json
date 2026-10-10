@@ -1,15 +1,32 @@
 {
-  "version": "1",
+  "_clinical_status": "DRAFT_NOT_CLINICALLY_APPROVED",
+  "version": "2",
   "locale": "en-PK",
   "status": "DRAFT — must be authored and approved by the Clinical Advisor before release (FR-CRIS-008)",
   "mild": {
-    "reference": "If things ever feel too heavy, people are available to talk to, for free. You can find them anytime under Get help."
+    "reference": {
+      "english": "If things ever feel too heavy, trained counsellors are free to talk to. Their numbers, hours and languages are under Get help.",
+      "roman_urdu": "Agar kabhi sab bohat bhaari lage, to trained counsellors se muft baat ho sakti hai. Unke numbers, timings aur zubaan Get help mein hain."
+    }
   },
   "danger": {
-    "full": "It sounds like you're carrying something really painful right now, and I'm glad you wrote it down. You don't have to face this alone — the people listed under Get help are available to talk right now, for free.\n\nAap akeli/akele nahi hain — Get help mein diye gaye log abhi aapki madad kar sakte hain.",
-    "abbreviated": "You don't have to carry this alone. People are available right now under Get help.\n\nMadad maujood hai — Get help dabayein."
+    "full": {
+      "english": "That sounds really painful, and I'm glad you told me. You don't have to carry this alone. The counsellors under Get help are free and confidential, and their hours and languages are listed there.",
+      "roman_urdu": "Ye sun ke bohat dukh hua, aur acha kiya jo aap ne bataya. Ye bojh akele uthane ki zaroorat nahi. Get help mein muft aur confidential counsellors hain, unki timings aur zubaan ke saath."
+    },
+    "abbreviated": {
+      "english": "You don't have to carry this alone. Free counsellors are under Get help.",
+      "roman_urdu": "Ye bojh akele uthane ki zaroorat nahi. Muft counsellors Get help mein hain."
+    }
   },
   "emergency": {
-    "full": "Your safety matters most right now. If you are in immediate danger or have taken something, call Rescue 1122 now. You can also call one of the helplines below — they are free and they will listen.\n\nAgar aap is waqt khatre mein hain, abhi 1122 par call karein."
+    "full": {
+      "english": "Your safety matters most right now. If you are in immediate danger or have taken something, call the emergency number at the top of the list below now. The helplines below are free and they will listen.",
+      "roman_urdu": "Is waqt aap ki hifazat sab se zaroori hai. Agar aap khatre mein hain ya kuch kha liya hai, to neeche list mein sab se upar wala emergency number abhi milayein. Neeche di gayi helplines muft hain."
+    }
+  },
+  "support_unavailable": {
+    "english": "I'm here, and I believe you. What happened is not your fault. I couldn't write a full reply just now, but you can keep writing to me, and free helplines are under Get help.",
+    "roman_urdu": "Main yahin hun, aur mujhe aap ki baat par yaqeen hai. Is mein aap ki koi ghalti nahi. Abhi poora jawab nahi likha ja saka, lekin aap yahan likhna jaari rakhein, aur muft helplines Get help mein hain."
   }
 }

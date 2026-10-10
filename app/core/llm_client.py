@@ -31,7 +31,19 @@ ClosureReason = Literal[
 RiskTier = Literal["clear", "mild", "danger", "emergency"]
 
 
+class Safety(BaseModel):
+    # Decided before the topic: what happened, when, how near the danger is, and to whom.
+    harm_type: Literal["none", "self_harm", "emotional_abuse", "physical_violence", "sexual_violence"]
+    timing: Literal["none", "past", "recent", "ongoing", "unclear"]
+    danger_now: Literal["no", "yes", "unclear"]
+    about: Literal["self", "someone_else", "unclear"]
+    discloses: bool  # the LATEST message itself tells of the harm (not a follow-up)
+    distress_now: bool  # flashbacks, panic, terror, can't sleep: happening to them now
+    asks_for_help: bool  # asks what to do, or for support or numbers
+
+
 class DomainResult(BaseModel):
+    safety: Safety  # first: decided before the topic
     domains: list[Domain]
     risk_tier: RiskTier
 
@@ -39,6 +51,7 @@ class DomainResult(BaseModel):
 class Classification(BaseModel):
     domains: list[str] | None  # None when nothing usable came back
     risk_tier: str | None  # None when the model stage was unavailable
+    safety: Safety | None = None  # None when the model stage was unavailable
 
 
 class CapturePrompt(BaseModel):
@@ -103,20 +116,46 @@ def _as_input(history: list[tuple[str, str]], text: str | None) -> list[dict]:
 
 
 _CLASSIFIER_INSTRUCTIONS = """\
-You label journal messages for a wellbeing app. Return the 1 or 2 topics that best
-describe the user's LATEST message (earlier messages are context only). Messages may
-be English, Roman Urdu or mixed.
+You label journal messages for a wellbeing app. Messages may be English, Roman Urdu
+or mixed. Earlier messages are context; label the LATEST one.
 
-Topics:
+First, safety. Read it the way a person would: tense ("he use to beat me" is past,
+"he beats me" is ongoing, "zabardasti hui thi" is past, "I am was in" means was),
+typos ("marrige", "scaredd") and idioms ("exam ne maar diya", "beat the deadline"
+are not harm).
+- harm_type: physical_violence (hit, beaten, hurt, threatened with harm),
+  sexual_violence (rape, sexual assault, being forced or pressured into sex,
+  including by a husband or partner: "he forces me every night", "zabardasti"),
+  emotional_abuse (insults, control, money withheld, called "abusive" or "toxic"
+  without physical detail), self_harm (thoughts of hurting or killing themselves),
+  or none.
+- timing: past (over), recent (the last few days), ongoing (still happening),
+  unclear, or none when harm_type is none.
+- danger_now: yes only when they may be hurt in the next hours (he is there or on
+  his way, a threat for tonight, intent to die with a plan); no when it is over and
+  they are safe; otherwise unclear.
+- about: self, someone_else ("my friend was raped"), or unclear.
+- discloses: true when the LATEST message itself tells of the harm ("he use to
+  beat me", "my husband was abusive"); false when it only follows up, answers or
+  reacts ("I am safe now", "ok", "why u wrote that"). harm_type and timing still
+  describe what the conversation is about.
+- distress_now: true when they describe heavy distress happening now: flashbacks,
+  panic, terror, can't sleep, shaking. Naming a diagnosis ("I have PTSD") or
+  everyday nerves (an exam, a meeting) alone is false.
+- asks_for_help: true when they ask what to do, or for support, someone to talk
+  to, or numbers.
+
+Then the 1 or 2 topics that best describe the message:
 {topics}
 
 Put the most important topic first. Use general only on its own.
 
-Also rate risk in the LATEST message as risk_tier:
+Then risk_tier, for self-harm only (violence and abuse go in safety):
 - clear: no sign of risk
 - mild: hopelessness or feeling like a burden, without mention of self-harm
-- danger: thoughts of suicide, self-harm, or wanting to die
+- danger: current thoughts of suicide, self-harm, or wanting to die
 - emergency: intent with a plan, means, timing, or an act already taken
+Self-harm that is over ("I used to cut myself") is clear or mild, not danger.
 When unsure between two tiers, choose the higher one.
 {hint}"""
 
@@ -187,7 +226,7 @@ def classify(
     domains = list(dict.fromkeys(result.domains))  # de-duplicate, keep order
     if len(domains) > 1:
         domains = [d for d in domains if d != "general"]
-    return Classification(domains=domains[:MAX_DOMAINS] or None, risk_tier=result.risk_tier)
+    return Classification(domains=domains[:MAX_DOMAINS] or None, risk_tier=result.risk_tier, safety=result.safety)
 
 
 def generate_capture_prompt(system_prompt: str, expected_value_id: str) -> CapturePrompt | None:
@@ -360,6 +399,10 @@ def _parse_reply(model: str, system_prompt: str, items: list[dict], text_format)
                 text_format=text_format,
                 store=False,
             )
+        except openai.BadRequestError as exc:
+            # A blocked disclosure is otherwise invisible: name the category, never the text.
+            logger.warning("Reply blocked: %s", sorted(_filtered_categories(exc)) or "bad request")
+            raise LLMError(str(exc)) from exc
         except (openai.OpenAIError, LLMError) as exc:
             raise LLMError(str(exc)) from exc
         if response.output_parsed is not None:

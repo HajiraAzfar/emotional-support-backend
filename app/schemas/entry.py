@@ -2,7 +2,7 @@ import uuid
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from app.schemas.message import MessageOut
 
 class EntryCreate(BaseModel):
@@ -28,6 +28,8 @@ class CaptureSpec(BaseModel):
     repeatable: bool = False
     # Library categories of this valence are listed first (e.g. positive feelings when savouring).
     prefer_valence: str | None = None
+    # She may speak this answer instead of typing it.
+    voice: bool = False
 
 
 class CaptureAnswer(BaseModel):
@@ -38,6 +40,8 @@ class CaptureAnswer(BaseModel):
     # Repeatable values only: she is still writing, so keep this value open
     # and do not move on yet.
     more: bool = False
+    # Made by the app for this answer: a retry after a lost response is recorded once.
+    client_id: uuid.UUID | None = None
 
 
 class ConversationChoice(BaseModel):
@@ -82,6 +86,25 @@ class EntryStepOut(EntryOut):
     """Returned by every action inside an entry, so the client can re-render the whole thread."""
     crisis_event: CrisisEventOut | None = None  # raised by this action, if any
     referral: bool = False  # gently suggest professional support
+
+
+class CheckInCreate(BaseModel):
+    """The whole daily check-in, sent once at the end. Empty factors or note are simply empty."""
+    # Made by the app, so a retry after a lost response is saved once.
+    client_id: uuid.UUID
+    mood: int = Field(ge=1, le=5)
+    factors: list[str] = Field(default_factory=list, max_length=60)
+    note: str = Field(default="", max_length=2000)
+
+
+class CheckInOut(BaseModel):
+    entry_id: uuid.UUID
+    # Echo's closing reply, and the helplines card drawn under it (soft | prominent), if any.
+    closing: str
+    card: Literal["soft", "prominent"] | None = None
+    crisis_event: CrisisEventOut | None = None
+    # Several low-mood check-ins in a row: the app gently points to Chat.
+    suggest: Literal["chat"] | None = None
 
 
 class EntrySummary(BaseModel):

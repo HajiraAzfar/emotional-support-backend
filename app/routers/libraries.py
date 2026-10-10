@@ -79,9 +79,12 @@ def add_term(
     if payload.entry_id:
         entry = db.query(Entry).filter(Entry.id == payload.entry_id, Entry.account_id == account.id).first()
 
-    # FR-PICK-007: user-defined terms go through the same crisis detection as entry text.
-    model_tier = None if crisis.suppressed(entry) else llm_client.classify([], term_name, None).risk_tier
-    event = crisis.record(db, account.id, entry, f"term:{name}", crisis.assess(term_name, model_tier))
+    # FR-PICK-007: user-defined terms go through the same crisis detection as
+    # journal text. Pickers exist only in journals, so the journal rules apply.
+    classification = (llm_client.Classification(domains=None, risk_tier=None) if crisis.suppressed(entry)
+                      else llm_client.classify([], term_name, None))
+    tier, _ = crisis.journal_tier(term_name, classification)
+    event = crisis.record(db, account.id, entry, f"term:{name}", tier)
     if entry is not None and event and event.text:
         sequence = db.query(Message).filter(Message.entry_id == entry.id).count() + 1
         db.add(Message(entry_id=entry.id, role="ai", kind="crisis", content=event.text, sequence=sequence))

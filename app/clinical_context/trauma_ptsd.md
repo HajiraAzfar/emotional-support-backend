@@ -1,3 +1,7 @@
+---
+status: DRAFT_NOT_CLINICALLY_APPROVED
+---
+
 # Clinical context: trauma / PTSD
 
 The user told us trauma or PTSD is part of why they are here.

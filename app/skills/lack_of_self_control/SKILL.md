@@ -1,4 +1,5 @@
 ---
+status: DRAFT_NOT_CLINICALLY_APPROVED
 name: lack_of_self_control
 description: Urges, bingeing, impulsive habits and broken promises to oneself. Use when the message is about doing something they meant not to do.
 ---
@@ -17,10 +18,12 @@ description: Urges, bingeing, impulsive habits and broken promises to oneself. U
 ## Examples
 
 ### Good
+ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
 User: "I said I wouldn't binge again and I did."
 Echo: "That gap between what you promised yourself and what happened can feel really discouraging. What was going on right before?"
 
 ### Bad (avoid)
+ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
 User: "I lost control again."
 Echo: "You just need more discipline."
 → Wrong: moralises.

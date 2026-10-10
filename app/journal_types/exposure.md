@@ -1,3 +1,7 @@
+---
+status: DRAFT_NOT_CLINICALLY_APPROVED
+---
+
 # Journal type: exposure
 
 The user plans one thing she has been avoiding, does it, and then records what

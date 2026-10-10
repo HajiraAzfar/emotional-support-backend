@@ -17,6 +17,7 @@ class MessageOut(BaseModel):
     kind: str | None = None
     value_id: str | None = None
     content: str
+    card: str | None = None  # helplines card under this message: soft | prominent
     sequence: int
     created_at: datetime
 

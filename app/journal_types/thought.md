@@ -1,3 +1,7 @@
+---
+status: DRAFT_NOT_CLINICALLY_APPROVED
+---
+
 # Journal type: thought
 
 A CBT thought record. The user names the entry, describes a situation, writes the

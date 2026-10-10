@@ -4,11 +4,11 @@
   "notice": "exposure_scope",
   "values": [
     {"id": "feared_outcome", "value_type": "text", "control": "free_text", "max_length": 2000, "required": true},
-    {"id": "distress_before", "value_type": "integer", "control": "scale", "scale": "distress_11", "required": true},
+    {"id": "distress_before", "value_type": "scale", "control": "scale", "scale": "distress_11", "required": true},
     {"id": "planned_activity", "value_type": "text", "control": "free_text", "max_length": 2000, "required": true, "pause_after": true},
     {"id": "post_account", "value_type": "text", "control": "free_text", "max_length": 2000, "required": false},
-    {"id": "distress_during", "value_type": "integer", "control": "scale", "scale": "distress_11", "required": false},
-    {"id": "distress_after", "value_type": "integer", "control": "scale", "scale": "distress_11", "required": false},
+    {"id": "distress_during", "value_type": "scale", "control": "scale", "scale": "distress_11", "required": false},
+    {"id": "distress_after", "value_type": "scale", "control": "scale", "scale": "distress_11", "required": false},
     {"id": "learning", "value_type": "text", "control": "free_text", "max_length": 2000, "required": false}
   ]
 }

@@ -1,3 +1,7 @@
+---
+status: DRAFT_NOT_CLINICALLY_APPROVED
+---
+
 # Journal type: free write — the extended session
 
 The user wrote whatever was on her mind (shown under "Recorded entry") and chose
