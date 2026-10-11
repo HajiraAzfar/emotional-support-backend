@@ -2,7 +2,7 @@ import logging
 from typing import Literal
 
 import openai
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
 from app.core.capture import all_value_ids
 from app.core.config import settings
@@ -85,6 +85,13 @@ class ChatReply(BaseModel):
 
 class LLMError(Exception):
     pass
+
+
+# Everything that counts as "the model did not answer". A refusal comes back as
+# prose rather than the structured object asked for, so parsing raises instead
+# of returning; without ValidationError here that escapes as a 500 on a reply
+# the caller already knows how to do without.
+LLM_FAILURES = (openai.OpenAIError, LLMError, ValidationError)
 
 
 _client: openai.OpenAI | None = None
@@ -217,7 +224,7 @@ def classify(
             return Classification(domains=None, risk_tier="danger")
         logger.warning("Classification failed: %s", type(exc).__name__)
         return Classification(domains=None, risk_tier=None)
-    except (openai.OpenAIError, LLMError) as exc:
+    except LLM_FAILURES as exc:
         logger.warning("Classification failed: %s", type(exc).__name__)
         return Classification(domains=None, risk_tier=None)
     if result is None:
@@ -246,7 +253,7 @@ def generate_capture_prompt(system_prompt: str, expected_value_id: str) -> Captu
             store=False,
         )
         result = response.output_parsed
-    except (openai.OpenAIError, LLMError) as exc:
+    except LLM_FAILURES as exc:
         logger.warning("Capture prompt generation failed: %s", type(exc).__name__)
         return None
 
@@ -278,7 +285,7 @@ def generate_closing(system_prompt: str) -> str | None:
             store=False,
         )
         result = response.output_parsed
-    except (openai.OpenAIError, LLMError) as exc:
+    except LLM_FAILURES as exc:
         logger.warning("Closing generation failed: %s", type(exc).__name__)
         return None
     text = result.message_text.strip() if result else ""
@@ -306,9 +313,16 @@ as it is. Return only the rewritten text."""
 
 def romanize(text: str) -> str | None:
     """
-    Urdu-script transcript → Roman Urdu, so a spoken message reads like her typed
-    ones and the Roman Urdu crisis rules can read it. None when it can't be done;
-    the caller then keeps the Urdu script, which the rest of the app still handles.
+    Transcript in a script she does not type in → Roman Urdu, so a spoken message
+    reads like her typed ones and the Roman Urdu crisis rules can read it. None
+    when it can't be done; the caller then keeps what it had, which the rest of
+    the app still handles.
+
+    Whisper writes Urdu in Devanagari as readily as in Urdu script — it is one
+    spoken language and the language ID picks either. The instructions name only
+    Urdu script and the model generalises to Devanagari on its own; spelling the
+    second case out for it was tried and made it refuse the task outright, so the
+    wording above is left exactly as it is.
     """
     if settings.LLM_MOCK:
         return None
@@ -320,7 +334,7 @@ def romanize(text: str) -> str | None:
             text_format=Romanized,
             store=False,
         )
-    except (openai.OpenAIError, LLMError) as exc:
+    except LLM_FAILURES as exc:
         logger.warning("Romanization failed: %s", type(exc).__name__)
         return None
     result = response.output_parsed
@@ -403,7 +417,7 @@ def _parse_reply(model: str, system_prompt: str, items: list[dict], text_format)
             # A blocked disclosure is otherwise invisible: name the category, never the text.
             logger.warning("Reply blocked: %s", sorted(_filtered_categories(exc)) or "bad request")
             raise LLMError(str(exc)) from exc
-        except (openai.OpenAIError, LLMError) as exc:
+        except LLM_FAILURES as exc:
             raise LLMError(str(exc)) from exc
         if response.output_parsed is not None:
             return response.output_parsed

@@ -38,7 +38,22 @@ _UNMISTAKABLE = {
 }
 _WORD = re.compile(r"[a-zA-Z']+")
 _URDU_CHARS = re.compile(r"[؀-ۿ]")
+# Speech-to-text writes Urdu in Devanagari about as often as in Urdu script:
+# Urdu and Hindi are one spoken language, and a recogniser's language ID picks
+# whichever it likes. Both read as foreign to someone who types Roman Urdu, and
+# both want the same thing done to them.
+_DEVANAGARI_CHARS = re.compile(r"[ऀ-ॿ]")
 MIN_WORDS = 3  # shorter messages ("ok", "idk") say nothing about language
+
+
+def needs_romanising(text: str) -> bool:
+    """
+    True when a transcript came back in a script she does not type in, and so
+    has to be rewritten in Roman Urdu before it reaches the thread. Urdu script
+    and Devanagari both count; the Roman Urdu crisis rules and everything else
+    that reads her words only read Latin letters.
+    """
+    return len(_URDU_CHARS.findall(text)) >= 3 or len(_DEVANAGARI_CHARS.findall(text)) >= 3
 
 
 def detect(text: str) -> str | None:

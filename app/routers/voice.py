@@ -58,7 +58,8 @@ def transcribe(
             status_code=422,
             detail="I couldn't make out any words in that. Try again a little closer to the phone.",
         )
-    # Urdu comes back in Urdu script; she types Roman Urdu, and so do the crisis rules.
-    if language.detect(text) == language.URDU_SCRIPT:
+    # Urdu comes back in Urdu script or in Devanagari, depending on which the
+    # recogniser decided it heard; she types Roman Urdu, and so do the crisis rules.
+    if language.needs_romanising(text):
         text = llm_client.romanize(text) or text
     return TranscriptOut(text=text)

@@ -16,6 +16,7 @@ Urdu script, as it did before.
 https://console.groq.com/docs/speech-to-text
 """
 import logging
+import re
 import time
 
 import httpx
@@ -38,32 +39,26 @@ MAX_TRANSCRIPT_CHARS = 5000  # the most a message can hold (MessageCreate)
 # passing the host microphone through. Without this, silence reaches the thread
 # as a real message and Echo answers "you" as though she had said it.
 MAX_NO_SPEECH = 0.5
+_DEVANAGARI = re.compile(r"[ऀ-ॿ]")
 
 
 class SpeechError(Exception):
     pass
 
 
-def transcribe(audio: bytes, filename: str) -> str:
-    """
-    Returns the text of the recording, or "" when no words were heard.
-    Raises SpeechError when the service is unavailable.
-    """
-    if settings.LLM_MOCK:
-        return "(Mock) This is what your voice message would say."
-    if not settings.GROQ_API_KEY:
-        raise SpeechError("No Groq key is set")
+def _ask(audio: bytes, filename: str, language: str | None = None) -> dict:
+    """One call to the service. Raises SpeechError when it cannot be reached."""
+    data = {"model": MODEL, "temperature": "0", "response_format": "verbose_json"}
+    if language:
+        data["language"] = language
 
-    # No `language`: she moves between English and Urdu, often in one sentence,
-    # and Whisper reads that better than being told which to expect.
-    # temperature=0 so the same recording gives the same words twice.
     for attempt in range(2):
         try:
             response = httpx.post(
                 URL,
                 headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
                 files={"file": (filename, audio)},
-                data={"model": MODEL, "temperature": "0", "response_format": "verbose_json"},
+                data=data,
                 timeout=60,
             )
         except httpx.HTTPError as exc:
@@ -85,17 +80,50 @@ def transcribe(audio: bytes, filename: str) -> str:
         raise SpeechError(f"HTTP {response.status_code}")
 
     try:
-        payload = response.json()
+        return response.json()
     except ValueError as exc:
         raise SpeechError("Unreadable response") from exc
 
+
+def _heard(payload: dict) -> str:
+    """The words in a response, with the segments it marked as silence dropped."""
     segments = payload.get("segments") or []
-    if segments:
-        heard = [s.get("text") or "" for s in segments
-                 if (s.get("no_speech_prob") or 0) <= MAX_NO_SPEECH]
-        text = " ".join(part.strip() for part in heard).strip()
-    else:
-        text = (payload.get("text") or "").strip()
+    if not segments:
+        return (payload.get("text") or "").strip()
+    kept = [s.get("text") or "" for s in segments
+            if (s.get("no_speech_prob") or 0) <= MAX_NO_SPEECH]
+    return " ".join(part.strip() for part in kept).strip()
+
+
+def transcribe(audio: bytes, filename: str) -> str:
+    """
+    Returns the text of the recording, or "" when no words were heard.
+    Raises SpeechError when the service is unavailable.
+    """
+    if settings.LLM_MOCK:
+        return "(Mock) This is what your voice message would say."
+    if not settings.GROQ_API_KEY:
+        raise SpeechError("No Groq key is set")
+
+    # No `language` on the first pass: she moves between English and Urdu, often
+    # in one sentence, and Whisper reads that better than being told which to
+    # expect. temperature=0 so the same recording gives the same words twice.
+    payload = _ask(audio, filename)
+    text = _heard(payload)
+
+    # Urdu and Hindi are one spoken language, and Whisper's language ID picks
+    # between them freely. When it picks Hindi it writes Devanagari, which she
+    # neither types nor reads here — and the romaniser, which turns Urdu script
+    # into Roman Urdu every time, refuses Devanagari more often than not
+    # (measured 1-4 successes in 8, whatever the wording). Asking again for Urdu
+    # gets Urdu script, which romanises reliably. Only when Devanagari actually
+    # came back, so English is never re-read as Urdu.
+    if _DEVANAGARI.search(text):
+        logger.info("Devanagari transcript (language=%s); asking again for Urdu",
+                    payload.get("language"))
+        again = _heard(_ask(audio, filename, language="ur"))
+        if again:
+            text = again
 
     # Content-free: how long the recording was and how sure the model was that
     # nobody was speaking. Without this there is no way to tell a silent
@@ -103,5 +131,5 @@ def transcribe(audio: bytes, filename: str) -> str:
     if not text:
         logger.info("Transcript empty: duration=%s no_speech_prob=%s",
                     payload.get("duration"),
-                    [s.get("no_speech_prob") for s in segments])
+                    [s.get("no_speech_prob") for s in payload.get("segments") or []])
     return text[:MAX_TRANSCRIPT_CHARS]
