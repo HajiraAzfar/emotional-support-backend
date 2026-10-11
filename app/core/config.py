@@ -1,3 +1,4 @@
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings
 
 
@@ -21,10 +22,10 @@ class Settings(BaseSettings):
     # AI Chat replies; unset uses OPENAI_RESPONSE_MODEL. Lets the chat run on a
     # stronger model than the journals without changing every call.
     OPENAI_CHAT_MODEL: str | None = None
-    # Voice messages: Azure Speech on the Foundry resource. Both may stay unset:
-    # the endpoint then comes from OPENAI_BASE_URL's resource, and the key is OPENAI_API_KEY.
-    AZURE_SPEECH_ENDPOINT: str | None = None
-    AZURE_SPEECH_KEY: str | None = None
+    # Voice messages: Groq's Whisper large v3. Unset turns voice off — the app
+    # falls back to typing. Reads VoiceEntry too, which is what the key is
+    # called in .env.
+    GROQ_API_KEY: str | None = Field(default=None, validation_alias=AliasChoices("GROQ_API_KEY", "VoiceEntry"))
     OPENAI_TIMEOUT_SECONDS: float = 30.0
     # true → no OpenAI calls; fixed placeholder replies so the app can be tested without a key.
     LLM_MOCK: bool = False

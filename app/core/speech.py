@@ -1,15 +1,22 @@
 """
-Speech to text for voice messages, through Azure Speech's fast transcription
-API on the same Foundry resource as the language models. It needs no model
-deployment: the Speech service comes with the resource, which matters because
-no transcription model can be deployed in this resource's region.
+Speech to text for voice messages, through Groq's Whisper large v3.
 
-https://learn.microsoft.com/azure/ai-services/speech-service/fast-transcription-create
+Azure Speech's fast transcription was used first, on the same Foundry resource
+as the language models. It transcribed Pakistani speech poorly: it had to be
+told which language to expect, and could only choose between en-US and ur-IN
+(ur-PK is "not yet supported"), which is the wrong shape for someone switching
+between English and Urdu inside one sentence. Whisper detects the language
+itself and handles the mix.
+
+The endpoint is OpenAI-compatible, so this is one multipart POST rather than
+another SDK. Speech that mixes English and Roman Urdu tends to come back as
+Roman Urdu already; the voice router still romanises anything that arrives in
+Urdu script, as it did before.
+
+https://console.groq.com/docs/speech-to-text
 """
-import json
 import logging
 import time
-from urllib.parse import urlparse
 
 import httpx
 
@@ -17,27 +24,24 @@ from app.core.config import settings
 
 logger = logging.getLogger(__name__)
 
-API_VERSION = "2025-10-15"
-# The service picks between these for what she said: English, or Urdu.
-# Fast transcription does not support ur-PK ("not yet supported"); ur-IN is
-# the same language and script, and recognises Pakistani speech fine.
-LOCALES = ["en-US", "ur-IN"]
+URL = "https://api.groq.com/openai/v1/audio/transcriptions"
+MODEL = "whisper-large-v3"
 MAX_TRANSCRIPT_CHARS = 5000  # the most a message can hold (MessageCreate)
+# Whisper invents a word rather than returning nothing: a recording with no
+# speech in it comes back as " you" or " Thank you." Each segment carries how
+# likely it is that nobody was speaking, and the two cases sit far apart —
+# measured silence 0.70, clear English 0.0005, English mixed with Roman Urdu
+# 0.12. Above this a segment is dropped, so an empty recording transcribes to
+# nothing, which the router turns into "I couldn't make out any words in that".
+#
+# That message is worth keeping honest: it is what told us the emulator was not
+# passing the host microphone through. Without this, silence reaches the thread
+# as a real message and Echo answers "you" as though she had said it.
+MAX_NO_SPEECH = 0.5
 
 
 class SpeechError(Exception):
     pass
-
-
-def _endpoint() -> str:
-    if settings.AZURE_SPEECH_ENDPOINT:
-        return settings.AZURE_SPEECH_ENDPOINT.rstrip("/")
-    # Unset: the resource behind OPENAI_BASE_URL, whose Speech service lives on
-    # the cognitiveservices host (<resource>.openai.azure.com → <resource>.cognitiveservices.azure.com).
-    host = urlparse(settings.OPENAI_BASE_URL or "").hostname or ""
-    if not host.endswith(".openai.azure.com"):
-        raise SpeechError("AZURE_SPEECH_ENDPOINT is not set")
-    return f"https://{host.split('.')[0]}.cognitiveservices.azure.com"
 
 
 def transcribe(audio: bytes, filename: str) -> str:
@@ -47,46 +51,57 @@ def transcribe(audio: bytes, filename: str) -> str:
     """
     if settings.LLM_MOCK:
         return "(Mock) This is what your voice message would say."
-    key = settings.AZURE_SPEECH_KEY or settings.OPENAI_API_KEY
-    if not key:
-        raise SpeechError("No Speech key is set")
+    if not settings.GROQ_API_KEY:
+        raise SpeechError("No Groq key is set")
 
-    url = f"{_endpoint()}/speechtotext/transcriptions:transcribe"
-    files = {
-        "audio": (filename, audio),
-        "definition": (None, json.dumps({"locales": LOCALES}), "application/json"),
-    }
-    # The resource turns away calls that come too close together; one short
-    # wait is enough for a single message.
+    # No `language`: she moves between English and Urdu, often in one sentence,
+    # and Whisper reads that better than being told which to expect.
+    # temperature=0 so the same recording gives the same words twice.
     for attempt in range(2):
         try:
             response = httpx.post(
-                url,
-                params={"api-version": API_VERSION},
-                headers={"Ocp-Apim-Subscription-Key": key},
-                files=files,
+                URL,
+                headers={"Authorization": f"Bearer {settings.GROQ_API_KEY}"},
+                files={"file": (filename, audio)},
+                data={"model": MODEL, "temperature": "0", "response_format": "verbose_json"},
                 timeout=60,
             )
         except httpx.HTTPError as exc:
             logger.warning("Transcription failed: %s", type(exc).__name__)
             raise SpeechError(str(exc)) from exc
+        # Rate limited: one short wait is enough for a single message.
         if response.status_code == 429 and attempt == 0:
             time.sleep(2)
             continue
         break
 
-    # Silence, or sound with no speech in it: the service could not tell which
-    # language it was, which here simply means no words were heard.
-    if response.status_code == 422 and "NoLanguageIdentified" in response.text:
-        return ""
     if response.status_code != 200:
-        # The error code only (e.g. InvalidLocale): the body never holds what she said.
+        # The error code only: the body can quote what she said.
         try:
-            code = response.json().get("innerError", {}).get("code", "")
+            code = (response.json().get("error") or {}).get("code", "")
         except ValueError:
             code = ""
         logger.warning("Transcription failed: HTTP %s %s", response.status_code, code)
         raise SpeechError(f"HTTP {response.status_code}")
-    phrases = response.json().get("combinedPhrases") or []
-    text = " ".join(p.get("text", "").strip() for p in phrases).strip()
+
+    try:
+        payload = response.json()
+    except ValueError as exc:
+        raise SpeechError("Unreadable response") from exc
+
+    segments = payload.get("segments") or []
+    if segments:
+        heard = [s.get("text") or "" for s in segments
+                 if (s.get("no_speech_prob") or 0) <= MAX_NO_SPEECH]
+        text = " ".join(part.strip() for part in heard).strip()
+    else:
+        text = (payload.get("text") or "").strip()
+
+    # Content-free: how long the recording was and how sure the model was that
+    # nobody was speaking. Without this there is no way to tell a silent
+    # microphone from a model that heard nothing.
+    if not text:
+        logger.info("Transcript empty: duration=%s no_speech_prob=%s",
+                    payload.get("duration"),
+                    [s.get("no_speech_prob") for s in segments])
     return text[:MAX_TRANSCRIPT_CHARS]

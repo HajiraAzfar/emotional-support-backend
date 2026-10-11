@@ -8,7 +8,7 @@ endpoints as typed text, so crisis screening and every other safeguard that
 reads text applies unchanged.
 
 The audio is never stored. It is held in memory for this one request, passed to
-Azure Speech, and dropped.
+the transcription service, and dropped.
 """
 from pathlib import Path
 
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/voice", tags=["voice"])
 
 # The app stops recording at 3 minutes; AAC mono at 48 kbps is about 1 MB for that.
 MAX_AUDIO_BYTES = 10 * 1024 * 1024
-# Formats Azure fast transcription accepts; the app sends m4a (AAC).
+# Formats Whisper accepts; the app sends m4a (AAC).
 AUDIO_SUFFIXES = {".m4a", ".mp4", ".aac", ".mp3", ".wav", ".webm", ".ogg", ".flac"}
 
 
