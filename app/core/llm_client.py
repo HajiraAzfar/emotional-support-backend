@@ -294,6 +294,39 @@ def generate_closing(system_prompt: str) -> str | None:
     return text
 
 
+MAX_PERSPECTIVE_CHARS = 400
+
+
+class Perspective(BaseModel):
+    message_text: str
+
+
+def generate_perspective(system_prompt: str) -> str | None:
+    """
+    One other way of reading her thought, offered when she asks for it. Returns
+    None whenever it can't be used: there is no stored fallback, because a
+    suggestion nobody wrote is worse than no suggestion (FR-AIR-014).
+    """
+    if settings.LLM_MOCK:
+        return None
+    try:
+        response = _get_client().responses.parse(
+            model=settings.OPENAI_RESPONSE_MODEL,
+            instructions=system_prompt,
+            input="Write the suggestion now.",
+            text_format=Perspective,
+            store=False,
+        )
+        result = response.output_parsed
+    except LLM_FAILURES as exc:
+        logger.warning("Perspective generation failed: %s", type(exc).__name__)
+        return None
+    text = result.message_text.strip() if result else ""
+    if not text or len(text) > MAX_PERSPECTIVE_CHARS:
+        return None
+    return text
+
+
 class Romanized(BaseModel):
     text: str
 

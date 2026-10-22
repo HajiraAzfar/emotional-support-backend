@@ -62,9 +62,13 @@ LIBRARY_NAMES: dict[str, dict[str, str]] = {
 
 # A schedule says what to collect, never what to say: wording comes from the model
 # or capture_fallbacks.json. These are the only keys a value may have.
-VALUE_TYPES = {"scale", "single_select", "multi_select", "text"}
+VALUE_TYPES = {"scale", "single_select", "multi_select", "text", "rating_set"}
 SPEC_KEYS = {"id", "value_type", "control", "required", "library", "scale", "max_length", "depends_on",
-             "min_mood", "max_mood", "prefer_valence", "repeatable", "pause_after", "voice"}
+             "min_mood", "max_mood", "prefer_valence", "valence_follows_mood", "repeatable",
+             "pause_after", "voice", "rates"}
+# A rating_set rates each item of an earlier multi_select on its own, 0-100:
+# one number for several feelings at once never says which one moved.
+RATING_MIN, RATING_MAX = 0, 100
 SCHEDULE_KEYS = {"journal_type", "ending", "skills", "notice", "variant", "values", "_comment"}
 
 
@@ -90,6 +94,16 @@ def _check_content() -> None:
                 raise RuntimeError(f"{journal_type}.{spec['id']}: unknown library {spec['library']}")
             if spec["control"] == "scale" and spec["scale"] not in SCALES:
                 raise RuntimeError(f"{journal_type}.{spec['id']}: unknown scale {spec['scale']}")
+            if spec["control"] == "rating_set":
+                rated = next((v for v in values[:values.index(spec)] if v["id"] == spec.get("rates")), None)
+                if rated is None or rated["control"] != "multi_select":
+                    raise RuntimeError(
+                        f"{journal_type}.{spec['id']}: rates must name an earlier multi_select"
+                    )
+                if spec.get("depends_on") != spec["rates"]:
+                    raise RuntimeError(
+                        f"{journal_type}.{spec['id']}: a rating_set must depend_on what it rates"
+                    )
             if spec["id"] not in FALLBACKS.get(journal_type, {}):
                 raise RuntimeError(f"{journal_type}.{spec['id']}: no fallback wording")
             if spec.get("pause_after") and spec is values[-1]:
@@ -383,6 +397,22 @@ def validate(spec: dict, value: Any, skipped: bool, extra: Extra = None) -> Any:
         # FR-PICK-004: an empty selection is a skip, not an error.
         return list(dict.fromkeys(value)) or None
 
+    if control == "rating_set":
+        # {item id: 0-100} for the items she chose. Rating only some of them is
+        # fine; rating something she did not choose is not.
+        if not isinstance(value, dict):
+            raise InvalidAnswer(f"{spec['id']} must be a mapping of id to rating")
+        chosen = spec.get("_rated_ids")
+        bad = [k for k, v in value.items()
+               if isinstance(v, bool) or not isinstance(v, int) or not RATING_MIN <= v <= RATING_MAX]
+        if bad:
+            raise InvalidAnswer(f"{spec['id']} ratings must be whole numbers {RATING_MIN}-{RATING_MAX}: {bad}")
+        if chosen is not None:
+            unknown = [k for k in value if k not in chosen]
+            if unknown:
+                raise InvalidAnswer(f"{spec['id']} rates something not chosen: {unknown}")
+        return value or None
+
     if control == "free_text":
         if not isinstance(value, str):
             raise InvalidAnswer(f"{spec['id']} must be text")
@@ -406,11 +436,61 @@ def display_text(spec: dict, value: Any, extra: Extra = None) -> str | None:
     if spec["control"] == "multi_select":
         names = _names(spec["library"], extra)
         return ", ".join(names.get(v, "(removed)") for v in value)
+    if spec["control"] == "rating_set":
+        names = _names(_rated_library(spec), extra)
+        return ", ".join(f"{names.get(k, '(removed)')} {v}" for k, v in value.items())
     return str(value)
 
 
-def spec_out(spec: dict) -> dict:
+def _rated_library(spec: dict) -> str:
+    """The library whose items a rating_set rates, found from the value it rates."""
+    for values in SCHEDULES.values():
+        rated = next((v for v in values if v["id"] == spec.get("rates")), None)
+        if rated is not None:
+            return rated["library"]
+    raise KeyError(spec.get("rates"))
+
+
+def rating_items(spec: dict, recorded: dict[str, Any], extra: Extra = None) -> list[dict]:
+    """
+    What the app puts a rating against: the items she actually chose, in the
+    order she chose them, with their names. Empty if she chose none — and then
+    the schedule never asks, because a rating_set depends_on what it rates.
+    """
+    names = _names(_rated_library(spec), extra)
+    chosen = recorded.get(spec.get("rates")) or []
+    return [{"id": i, "name": names.get(i, "(removed)")} for i in chosen]
+
+
+# Which end of a library she is most likely to be reaching for, by the mood she
+# just recorded. The list is the same either way and every item stays reachable;
+# only the order changes. A mixed mood leads nowhere in particular, so it leads
+# nowhere: she is not sorted into a half she did not choose.
+POSITIVE_FROM_MOOD = 4
+NEGATIVE_UP_TO_MOOD = 2
+
+
+def valence_for(spec: dict, recorded: dict[str, Any]) -> str | None:
+    if not spec.get("valence_follows_mood"):
+        return spec.get("prefer_valence")
+    mood = recorded.get("mood")
+    if mood is None:
+        return spec.get("prefer_valence")
+    if mood >= POSITIVE_FROM_MOOD:
+        return "positive"
+    if mood <= NEGATIVE_UP_TO_MOOD:
+        return "negative"
+    return None
+
+
+def spec_out(
+    spec: dict,
+    recorded: dict[str, Any] | None = None,
+    values: list[dict] | None = None,
+    extra: Extra = None,
+) -> dict:
     """What the client needs to render the control (FR-ENT-025)."""
+    recorded = recorded or {}
     out = {
         "value_id": spec["id"],
         "control": spec["control"],
@@ -418,13 +498,61 @@ def spec_out(spec: dict) -> dict:
         "library": spec.get("library"),
         "scale": SCALES[spec["scale"]] if spec["control"] == "scale" else None,
         "max_length": spec.get("max_length"),
-        "prefer_valence": spec.get("prefer_valence"),
+        "prefer_valence": valence_for(spec, recorded),
         # FR-JRN-003: free write is one value the user may send in several messages.
         "repeatable": bool(spec.get("repeatable")),
         # She may speak this answer instead of typing it.
         "voice": bool(spec.get("voice")),
+        # A rating_set rates what she already chose: the items, and the ends of
+        # the range, so the app never hardcodes either.
+        "rates": (
+            {"items": rating_items(spec, recorded, extra),
+             "min": RATING_MIN, "max": RATING_MAX,
+             "carried": recorded.get(_carries_from(spec)) or None}
+            if spec["control"] == "rating_set" else None
+        ),
     }
+    if values is not None:
+        out["step"], out["total"] = _progress(values, recorded, spec)
     return out
+
+
+# emotions_after starts from the ratings she already gave, so she adjusts rather
+# than rates from nothing. Rating a feeling again is not a fresh question.
+_CARRIES = {"emotions_after": "emotions_before"}
+
+
+def _carries_from(spec: dict) -> str:
+    return _CARRIES.get(spec["id"], "")
+
+
+def _ruled_out(spec: dict, recorded: dict[str, Any]) -> bool:
+    """
+    Whether this value is settled as never being asked. Not the same as "not
+    asked yet": a rating waits on feelings she has not reached, and counting it
+    out would make the total jump upwards when she gets there. Only an answered
+    dependency that came back empty, or a mood outside the range, settles it.
+    """
+    depends_on = spec.get("depends_on")
+    if depends_on is not None and depends_on in recorded:
+        answer = recorded.get(depends_on)
+        if answer is None or answer == [] or answer == "":
+            return True
+    mood = recorded.get("mood")
+    if mood is not None and not (spec.get("min_mood", mood) <= mood <= spec.get("max_mood", mood)):
+        return True
+    return False
+
+
+def _progress(values: list[dict], recorded: dict[str, Any], spec: dict) -> tuple[int, int]:
+    """
+    Which step she is on, out of how many this entry will ask. Counted, never
+    hardcoded: a schedule branches and the trauma variant asks fewer. The total
+    can shrink as her answers rule questions out; it never grows, so it never
+    promises fewer steps than are coming.
+    """
+    coming = [v["id"] for v in values if v["id"] in recorded or not _ruled_out(v, recorded)]
+    return (coming.index(spec["id"]) + 1 if spec["id"] in coming else len(coming)), len(coming)
 
 
 def summary(values: list[dict], recorded: dict[str, Any], extra: Extra = None) -> str:

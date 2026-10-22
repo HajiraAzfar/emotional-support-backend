@@ -82,6 +82,39 @@ def _label(library: str, item_id: str, user_terms: dict) -> str:
     return capture.LIBRARY_NAMES[library].get(item_id) or user_terms.get(item_id) or item_id
 
 
+def _rating_shifts(entries, values, user_terms) -> list[dict]:
+    """
+    Per feeling: how it was rated before the thought work and after it, averaged
+    over the entries that rated it both times (FR-INS-009 in the same spirit as
+    the intensity chart). Self-reported, and reported as such: the direction of
+    a number she chose, never a measurement of her.
+    """
+    pairs: dict[str, list[tuple[int, int]]] = {}
+    for entry in entries:
+        recorded = values.get(entry.id, {})
+        before, after = recorded.get("emotions_before"), recorded.get("emotions_after")
+        if not isinstance(before, dict) or not isinstance(after, dict):
+            continue
+        for item, start in before.items():
+            if item in after:
+                pairs.setdefault(item, []).append((start, after[item]))
+    rows = [
+        {
+            "id": item,
+            "label": _label("feelings", item, user_terms),
+            "entries": len(seen),
+            "before": round(sum(b for b, _ in seen) / len(seen)),
+            "after": round(sum(a for _, a in seen) / len(seen)),
+        }
+        for item, seen in pairs.items()
+    ]
+    for row in rows:
+        row["change"] = row["after"] - row["before"]
+    # Most-rated first, then by how far it moved, so the list has an order that
+    # is not alphabetical chance.
+    return sorted(rows, key=lambda r: (-r["entries"], r["change"]))
+
+
 def _counts(entries, values, value_id: str, library: str, user_terms: dict) -> list[dict]:
     """
     FR-INS-006/008/010: how many entries each item was selected in, most first.
@@ -127,6 +160,11 @@ def build(db: Session, account_id, period: str, user_terms: dict, now: datetime 
     ]
     intensity_bounds = capture.scale_bounds("feeling_intensity") or (0, 10)
     mood_bounds = capture.scale_bounds("mood") or (1, 5)
+
+    # The thought journal rates each feeling before the work and again after it,
+    # so the pair says which feeling moved — not whether she "improved". Only
+    # feelings rated both times can be compared, and one entry is not a pattern.
+    shifts = _rating_shifts(entries, values, user_terms)
 
     traps = _counts(entries, values, "thinking_traps", "thinking_traps", user_terms)
     triggers = _counts(entries, values, "triggers", "triggers", user_terms)
@@ -191,6 +229,7 @@ def build(db: Session, account_id, period: str, user_terms: dict, now: datetime 
         "triggers": triggers,
         "feelings": feelings,
         "thinking_traps": traps,
+        "rating_shifts": shifts,
         # The trends: what moved, week by week, rather than one number per period.
         "mood_trend": _mood_trend(entries, values, tz_offset, mood_bounds),
         "mood_distribution": _distribution(entries, values, "mood_5"),

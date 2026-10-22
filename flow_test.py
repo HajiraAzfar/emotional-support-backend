@@ -67,15 +67,34 @@ def post(url, body):
     return r.json()
 
 
+def answer_check_in(u, **answers):
+    """
+    Answer whatever the check-in asks next, in whatever order it asks. The
+    schedule decides which values come up at a given mood, so a helper that
+    hardcoded the order would be testing the helper.
+    """
+    given = {"mood": 2, "feelings": ["tired"], "feeling_intensity": 6,
+             "triggers": ["workload"], "trigger_note": "", "thinking_traps": [],
+             "good_note": ""}
+    given.update(answers)
+    asked, state, replies = [], None, {}
+    while True:
+        r = c.get(u).json() if state is None else state
+        spec = r.get("next_capture")
+        if not spec:
+            return r, asked, replies
+        value_id = spec["value_id"]
+        value = given.get(value_id)
+        asked.append(value_id)
+        state = post(u + "/captures", {"value_id": value_id, "value": value,
+                                       "skipped": value in (None, "", [])})
+        replies[value_id] = state
+
+
 def complete_check_in(note="", traps=None):
     j = post("/entries", {"journal_type": "check_in"}); u = f"/entries/{j['id']}"
-    post(u + "/captures", {"value_id": "mood", "value": 2})
-    post(u + "/captures", {"value_id": "triggers", "value": ["workload"]})
-    last = post(u + "/captures", {"value_id": "trigger_note", "value": note})
-    post(u + "/captures", {"value_id": "thinking_traps", "value": traps or []})
-    post(u + "/captures", {"value_id": "feelings", "value": ["tired"]})
-    j = post(u + "/captures", {"value_id": "feeling_intensity", "value": 6})
-    return u, j, last
+    j, _, replies = answer_check_in(u, mood=2, trigger_note=note, thinking_traps=traps or [])
+    return u, j, replies["trigger_note"]
 
 
 settings.OPENAI_API_KEY = None
@@ -95,10 +114,8 @@ u, j, _ = complete_check_in(note="work was a lot")
 check(j["status"] == "completed" and j["conversation_status"] == "offered" and j["support_note"] is None, "clean entry completes with offer, no support note")
 
 j = post("/entries", {"journal_type": "check_in"}); uf = f"/entries/{j['id']}"
-for vid, val in [("mood", 3), ("triggers", []), ("trigger_note", ""), ("thinking_traps", [])]:
-    j = post(uf + "/captures", {"value_id": vid, "value": val})
-j = post(uf + "/captures", {"value_id": "feelings", "value": []})
-check(j["status"] == "completed" and j["next_capture"] is None,
+j, asked, _ = answer_check_in(uf, mood=3, feelings=[])
+check(j["status"] == "completed" and j["next_capture"] is None and "feeling_intensity" not in asked,
       "no feelings named -> no intensity question, entry completes (FR-INS-009)")
 
 print("--- B: mild tier (FR-CRIS-005)")
@@ -169,17 +186,18 @@ def parse(**kw):
 fake = MagicMock(); fake.responses.parse.side_effect = parse
 with patch.object(lc, "_get_client", return_value=fake):
     model["risk"] = "danger"
+    # A low mood, so the thinking patterns still come after the note.
     j = post("/entries", {"journal_type": "check_in"}); u = f"/entries/{j['id']}"
-    post(u + "/captures", {"value_id": "mood", "value": 3})
-    post(u + "/captures", {"value_id": "triggers", "value": []})
+    for value_id, value in (("mood", 2), ("feelings", []), ("triggers", [])):
+        post(u + "/captures", {"value_id": value_id, "value": value})
     calls.clear()
     j = post(u + "/captures", {"value_id": "trigger_note", "value": "sab theek hai bas"})  # lexical clear, model danger
     check(j["crisis_event"]["tier"] == "danger", "model tier wins when higher than rules (FR-CRIS-002)")
     check(calls == ["DomainResult"], f"after danger, no capture-prompt generation (calls: {calls})")
     check(j["messages"][-1]["content"] == capture.fallback_wording("check_in", "thinking_traps"), "next prompt uses stored wording")
     calls.clear()
-    post(u + "/captures", {"value_id": "thinking_traps", "value": []})
-    post(u + "/captures", {"value_id": "feelings", "value": []})
+    j = post(u + "/captures", {"value_id": "thinking_traps", "value": []})
+    check(j["status"] == "completed", "the entry still finishes after a danger tier")
     check(calls == [], "zero generative calls for the rest of a suppressed entry")
 
     model["risk"] = "clear"
@@ -276,7 +294,7 @@ post(ud + "/captures", {"value_id": "mood", "value": 4})
 drafts = c.get("/entries", params={"status": "in_progress", "since_days": 7}).json()
 check(drafts[0]["id"] == j["id"] and drafts[0]["mood"] == 4, "draft listed for resumption with mood")
 g = c.get(ud).json()
-check(g["next_capture"]["value_id"] == "triggers" and len(g["messages"]) == 3, "reopened draft resumes at the first unrecorded value")
+check(g["next_capture"]["value_id"] == "feelings" and len(g["messages"]) == 3, "reopened draft resumes at the first unrecorded value")
 done = c.get("/entries", params={"status": "completed"}).json()
 check(all(e["status"] == "completed" for e in done) and done == sorted(done, key=lambda e: e["completed_at"], reverse=True), "completed list, newest first")
 victim = done[0]["id"]
@@ -303,6 +321,7 @@ bad = post("/libraries/feelings/terms", {"name": "want to die"})
 check(bad["crisis_event"]["tier"] == "danger", "user term screened for crisis (FR-PICK-007)")
 j = post("/entries", {"journal_type": "check_in"}); u = f"/entries/{j['id']}"
 post(u + "/captures", {"value_id": "mood", "value": 3})
+post(u + "/captures", {"value_id": "feelings", "value": []})
 j = post(u + "/captures", {"value_id": "triggers", "value": [t["term"]["id"], "money"]})
 check(j["messages"][-2]["content"] == "Rishtedaar, Money", "own term selectable and shown by name")
 
@@ -312,8 +331,7 @@ t3 = post("/libraries/triggers/terms", {"name": "end my life", "entry_id": j["id
 g = c.get(u).json()
 check(t3["crisis_event"]["tier"] == "danger" and g["crisis_tier"] == "danger", "danger term added inside an entry raises that entry's tier")
 check(g["messages"][-1]["kind"] == "crisis", "and puts fixed crisis content in the thread")
-for vid, val in [("triggers", []), ("trigger_note", ""), ("thinking_traps", []), ("feelings", [])]:
-    g = post(u + "/captures", {"value_id": vid, "value": val})
+g, _, _ = answer_check_in(u, mood=1, feelings=[], triggers=[], trigger_note="", thinking_traps=[])
 check(g["conversation_status"] == "suppressed", "so the entry ends without an AI offer")
 other = S().query(UserTerm).filter(UserTerm.name == "Rishtedaar").one()
 check(other.account_id == acct.id, "terms belong to the account that added them")
@@ -435,13 +453,15 @@ settings.OPENAI_API_KEY = None; settings.LLM_MOCK = False
 j = post("/entries", {"journal_type": "thought"}); ut = f"/entries/{j['id']}"
 order = []
 answers = {"name": "Meeting ke baad", "situation": "Team meeting mein sab ke saamne", "automatic_thought": "sab samajhte hain main nalayak hoon",
-           "thinking_traps": ["mind_reading", "labelling"], "feelings": ["ashamed"], "feeling_intensity": 8, "supporting_evidence": "kisi ne meri baat nahi maani",
+           "thinking_traps": ["mind_reading", "labelling"], "feelings": ["ashamed"],
+           "emotions_before": {"ashamed": 90}, "emotions_after": {"ashamed": 50}, "supporting_evidence": "kisi ne meri baat nahi maani",
            "contradicting_evidence": "lead ne baad mein mera idea use kiya", "revised_thought": "shayad sab aisa nahi sochte"}
 while j["next_capture"]:
     vid = j["next_capture"]["value_id"]; order.append(vid)
     j = post(ut + "/captures", {"value_id": vid, "value": answers[vid]})
-check(order == ["name", "situation", "automatic_thought", "thinking_traps", "feelings", "feeling_intensity",
-                "supporting_evidence", "contradicting_evidence", "revised_thought"], f"nine steps in SRS order: {order}")
+check(order == ["name", "situation", "automatic_thought", "feelings", "emotions_before", "thinking_traps",
+                "supporting_evidence", "contradicting_evidence", "revised_thought", "emotions_after"],
+      f"the seven CBT stages in order, feelings before the patterns: {order}")
 check(j["status"] == "completed" and j["conversation_status"] == "offered", "completes and offers the conversation")
 check(not any(m["kind"] == "grounding" for m in j["messages"]), "no grounding message for a non-trauma user")
 listed = [e for e in c.get("/entries", params={"status": "completed"}).json() if e["id"] == j["id"]][0]
@@ -578,13 +598,8 @@ s.query(Message).delete(); s.query(CapturedValue).delete(); s.query(Entry).delet
 
 def finished_check_in(mood, when, traps=(), feelings=("tired",), triggers=("workload",), intensity=6):
     j = post("/entries", {"journal_type": "check_in"}); u = f"/entries/{j['id']}"
-    post(u + "/captures", {"value_id": "mood", "value": mood})
-    post(u + "/captures", {"value_id": "triggers", "value": list(triggers)})
-    post(u + "/captures", {"value_id": "trigger_note", "value": None, "skipped": True})
-    post(u + "/captures", {"value_id": "thinking_traps", "value": list(traps)})
-    post(u + "/captures", {"value_id": "feelings", "value": list(feelings)})
-    if feelings:
-        post(u + "/captures", {"value_id": "feeling_intensity", "value": intensity})
+    answer_check_in(u, mood=mood, triggers=list(triggers), trigger_note="likha hua note",
+                    thinking_traps=list(traps), feelings=list(feelings), feeling_intensity=intensity)
     e = S().get(Entry, uuid.UUID(j["id"]))
     with S() as w:
         row = w.get(Entry, e.id); row.completed_at = when; w.commit()
@@ -609,12 +624,16 @@ check([p["value"] for p in ints["points"]] == [3, 8], f"intensity points in date
 check(all(p["entry_id"] and p["journal_type"] for p in ints["points"]), "each intensity point names its entry and journal")
 check((ints["min"], ints["max"]) == (0, 10), f"intensity ends come from the scale, not the chart: {ints['min']}-{ints['max']}")
 check(ints["needed"] == 1, f"intensity placeholder counts what is missing (FR-INS-021): {ints['needed']}")
-check([t["id"] for t in j["triggers"]][0] == "workload" and j["triggers"][0]["count"] == 2,
-      "trigger counts, most frequent first (FR-INS-006)")
+# One of the two check-ins was at mood 4, where neither triggers nor thinking
+# patterns are asked at all, so only the low-mood one contributes either.
+triggers = {t["id"]: t for t in j["triggers"]}
+check(triggers["workload"]["count"] == 1 and triggers["money"]["count"] == 1,
+      f"trigger counts, from the entries that were asked (FR-INS-006): {j['triggers']}")
 check(all("count" in t and "%" not in str(t) for t in j["triggers"]), "counts of entries, no percentages (FR-INS-007)")
-check(j["triggers"][0]["name"] == "Workload", "items are labelled by name, not id")
+check(triggers["workload"]["name"] == "Workload", "items are labelled by name, not id")
 traps = {t["id"]: t for t in j["thinking_traps"]}
-check(traps["mind_reading"]["count"] == 2 and traps["catastrophising"]["count"] == 1, "thinking trap counts (FR-INS-010)")
+check(traps["mind_reading"]["count"] == 2 and traps["catastrophising"]["count"] == 1,
+      f"thinking trap counts, from every entry that wrote a note (FR-INS-010): {j['thinking_traps']}")
 check("change" not in traps["mind_reading"], "no change shown when the previous period has too few entries (FR-INS-011)")
 days = j["calendar"]["days"]
 check(len(days) == 2, f"calendar marks the days with a completed entry (FR-INS-015): {days}")
@@ -631,9 +650,10 @@ check(j7["completed_entries"] == 2 and jall["completed_entries"] == 3, "the peri
 check(jall["from"] is None, "'all' has no start date")
 check(c.get("/insights", params={"period": "weekly"}).status_code == 422, "an unknown period is refused")
 
-# enough history in the previous period, so the change appears
+# enough history in the previous period, so the change appears. Low moods,
+# because that is where the thinking patterns are asked for at all.
 for day in (35, 37, 39):
-    finished_check_in(3, now - timedelta(days=day), traps=["mind_reading"])
+    finished_check_in(2, now - timedelta(days=day), traps=["mind_reading"])
 traps = {t["id"]: t for t in c.get("/insights").json()["thinking_traps"]}
 check(traps["mind_reading"].get("change") == -2, f"change against the previous period (FR-INS-011): {traps['mind_reading'].get('change')}")
 
@@ -643,8 +663,7 @@ s = S(); s.query(Message).delete(); s.query(CapturedValue).delete(); s.query(Ent
 def entry_on(when):
     """A completed check-in whose completed_at is exactly `when` (UTC)."""
     j = post("/entries", {"journal_type": "check_in"}); u = f"/entries/{j['id']}"
-    for vid, val in [("mood", 3), ("triggers", []), ("trigger_note", ""), ("thinking_traps", []), ("feelings", [])]:
-        post(u + "/captures", {"value_id": vid, "value": val})
+    answer_check_in(u, mood=3, feelings=[], triggers=[], trigger_note="")
     with S() as w:
         row = w.get(Entry, uuid.UUID(j["id"])); row.completed_at = when; w.commit()
     return j["id"]
@@ -690,19 +709,18 @@ PKT = 300
 
 def check_in_on(when, mood, traps=(), triggers=()):
     j = post("/entries", {"journal_type": "check_in"}); u = f"/entries/{j['id']}"
-    post(u + "/captures", {"value_id": "mood", "value": mood})
-    post(u + "/captures", {"value_id": "triggers", "value": list(triggers)})
-    post(u + "/captures", {"value_id": "trigger_note", "value": "", "skipped": True})
-    post(u + "/captures", {"value_id": "thinking_traps", "value": list(traps)})
-    post(u + "/captures", {"value_id": "feelings", "value": []})
+    answer_check_in(u, mood=mood, triggers=list(triggers), trigger_note="likha hua note",
+                    thinking_traps=list(traps), feelings=[])
     with S() as w:
         row = w.get(Entry, uuid.UUID(j["id"])); row.completed_at = when; w.commit()
     return j["id"]
 
 now = datetime.utcnow()
 # two weeks: the older one worse and full of mind reading, the newer one better
-for back, mood, traps in [(16, 2, ["mind_reading"]), (15, 2, ["mind_reading", "catastrophising"]), (14, 3, ["mind_reading"]),
-                          (3, 4, ["mind_reading"]), (2, 4, []), (1, 5, [])]:
+# Moods 3 and up are never asked for a thinking pattern, so the newer week has
+# none whatever is passed here; 3 still gets the triggers, 5 does not.
+for back, mood, traps in [(16, 2, ["mind_reading"]), (15, 2, ["mind_reading", "catastrophising"]), (14, 2, ["mind_reading"]),
+                          (3, 3, ["mind_reading"]), (2, 3, []), (1, 5, [])]:
     check_in_on(now - timedelta(days=back), mood, traps, triggers=["workload"])
 
 j = c.get("/insights", params={"period": "3m", "tz_offset": PKT}).json()
@@ -715,7 +733,7 @@ check(sum(p["entries"] for p in trend["points"]) == 6, "every entry counts towar
 check((trend["min"], trend["max"]) == (1, 5), "the trend carries the ends of the mood scale")
 
 dist = {row["value"]: row["count"] for row in j["mood_distribution"]}
-check(dist == {1: 0, 2: 2, 3: 1, 4: 2, 5: 1}, f"the distribution counts every point of the scale: {dist}")
+check(dist == {1: 0, 2: 3, 3: 2, 4: 0, 5: 1}, f"the distribution counts every point of the scale: {dist}")
 check([r["label"] for r in j["mood_distribution"]][0] == "Very low", "each bar is labelled from the scale")
 
 traps = j["trap_trend"]
@@ -736,7 +754,7 @@ for back in (8, 9, 10):
     check_in_on(now - timedelta(days=back), 3, triggers=["workload", "money"])
 week = c.get("/insights", params={"period": "7d", "tz_offset": PKT}).json()
 workload = next(row for row in week["triggers"] if row["id"] == "workload")
-check(workload["change"] == 0, f"workload: 3 this week and 3 the week before, so no change ({workload})")
+check(workload["change"] == -1, f"workload: 2 this week and 3 the week before ({workload})")
 check(all("change" in row for row in week["feelings"]) or not week["feelings"], "feelings carry it too")
 gone = [row for row in week["triggers"] if row["id"] == "money"]
 check(not gone, "a trigger she stopped noting simply drops out of this period")
@@ -1197,5 +1215,569 @@ texts = [md_loader.load_base(), md_loader.load_capture_instructions(), md_loader
          json.dumps(c.get("/onboarding/distress-scale").json()), c.get("/library/why-writing-helps").text]
 check(not any(M in t for t in texts), "the clinical-approval marker never reaches a prompt or a response")
 app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
+
+print("--- T: Your Week in Reflection (weekly report, badges, carry-forward)")
+settings.OPENAI_API_KEY = None; settings.LLM_MOCK = False  # nothing generated in this section
+from app.core import weekly as wk, badges as bdg, narrative as nar
+from app.models.earned_badge import EarnedBadge
+
+TZ = 300  # Pakistan: +5h, so a local Monday starts at 19:00 UTC on Sunday
+
+# Her own account, so the counts below are this section's and nobody else's.
+wacct = Account(email="week@x.com")
+with S() as w:
+    w.add(wacct); w.commit(); w.refresh(wacct)
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, wacct.id)
+
+MON = wk.current_week_start(TZ) - timedelta(days=21)  # a finished week, inside the history window
+LOCAL_MIDNIGHT = datetime.combine(MON, datetime.min.time()) - timedelta(minutes=TZ)
+
+
+def at(day, hour=12, minute=0):
+    """UTC instant for a local time on day N of the week under test."""
+    return LOCAL_MIDNIGHT + timedelta(days=day, hours=hour, minutes=minute)
+
+
+def done(journal, when, answers):
+    """
+    Walk a journal the way the app does: ask the server what is next rather
+    than assuming an order, so reordering a schedule changes one place, not
+    every fixture. "_resume" in the answers is the pause an exposure waits on.
+    """
+    wanted = dict(answers)
+    j = post("/entries", {"journal_type": journal}); u = f"/entries/{j['id']}"
+    while j["next_capture"]:
+        vid = j["next_capture"]["value_id"]
+        if vid not in wanted:
+            raise AssertionError(f"{journal} asked for {vid}, which this fixture has no answer for")
+        value = wanted[vid]
+        j = post(u + "/captures", {"value_id": vid, "value": value, "skipped": value is None})
+        if "_resume" in wanted and j["pending_resume"]:
+            j = post(u + "/resume", {})
+    with S() as w:
+        row = w.get(Entry, uuid.UUID(j["id"])); row.completed_at = when; w.commit()
+    return j["id"]
+
+
+def check_in_at(when, mood=3, traps=(), feelings=("tired",), triggers=("workload",), intensity=6):
+    j = post("/entries", {"journal_type": "check_in"}); u = f"/entries/{j['id']}"
+    answer_check_in(u, mood=mood, triggers=list(triggers), trigger_note="likha hua note",
+                    thinking_traps=list(traps), feelings=list(feelings), feeling_intensity=intensity)
+    with S() as w:
+        row = w.get(Entry, uuid.UUID(j["id"])); row.completed_at = when; w.commit()
+    return j["id"]
+
+
+def savouring_at(when, event="chai with ammi", significance="felt looked after"):
+    return done("savouring", when, [
+        ("event", event), ("significance", significance), ("feelings", ["hopeful"])])
+
+
+def thought_at(when, traps=("mind_reading",), revised="maybe she was just busy"):
+    return done("thought", when, [
+        ("name", None), ("situation", "message seen, no reply"),
+        ("automatic_thought", "she is annoyed with me"), ("thinking_traps", list(traps)),
+        ("feelings", ["hurt"]), ("emotions_before", {"hurt": 70}), ("emotions_after", {"hurt": 40}),
+        ("supporting_evidence", None), ("contradicting_evidence", None), ("revised_thought", revised)])
+
+
+def exposure_at(when, attempted=True, learning="utna bura nahi tha"):
+    steps = [("feared_outcome", "lift mein phans jaungi"), ("distress_before", 8),
+             ("planned_activity", "lift lena hai"), ("_resume", None)]
+    if attempted:
+        steps += [("post_account", "kar liya"), ("distress_during", 7),
+                  ("distress_after", 4), ("learning", learning)]
+    else:
+        steps += [("post_account", None), ("distress_during", None),
+                  ("distress_after", None), ("learning", None)]
+    return done("exposure", when, steps)
+
+
+# Two entries whose UTC day is the same Sunday, but whose local days are not:
+# one is 00:30 on Monday (this week), one is 23:30 on Sunday (the week before).
+inside = check_in_at(at(0, 0, 30), mood=2)
+outside = check_in_at(at(-1, 23, 30), mood=5)
+check_in_at(at(2), mood=4, traps=["mind_reading"])
+savouring_at(at(3))
+thought_at(at(4))
+thought_at(at(5), traps=["catastrophising"], revised="")   # a different pattern, no balanced thought
+exposure_at(at(5), attempted=True)
+exposure_at(at(6), attempted=False)                # planned, never tried
+draft = post("/entries", {"journal_type": "check_in"})  # started, never finished
+
+w = c.get("/insights/weekly", params={"week_start": MON.isoformat(), "tz_offset": TZ,
+                                      "narrative": False}).json()
+ov = w["overview"]
+check(w["week_start"] == MON.isoformat() and w["week_end"] == (MON + timedelta(days=6)).isoformat(),
+      f"the week is Monday to Sunday: {w['week_start']}..{w['week_end']}")
+check(ov["entries"] == 7, f"only this week's completed entries count: {ov['entries']}")
+check([p["entry_id"] for p in w["mood"]["points"]].count(inside) == 1
+      and outside not in [p["entry_id"] for p in w["mood"]["points"]],
+      "00:30 Monday is this week and 23:30 Sunday is not, though both are the same UTC day")
+check(draft["id"] not in [p["entry_id"] for p in w["mood"]["points"]], "a draft is not in the report")
+check((ov["check_in"], ov["thought"], ov["savouring"]) == (2, 2, 1),
+      f"each journal counted separately: {ov}")
+check((ov["exposure_planned"], ov["exposure_attempted"]) == (2, 1),
+      f"a step planned is not a step tried: {ov['exposure_planned']} planned, {ov['exposure_attempted']} tried")
+check(len(w["mood"]["points"]) == 2 and all(p["value"] is not None for p in w["mood"]["points"]),
+      "savouring and thought records have no mood, and no mood is invented for them")
+check((w["mood"]["min"], w["mood"]["max"]) == (1, 5), "the scale ends come from the scale")
+
+# What she wrote for herself, quoted back with a way to the entry.
+kinds = {card["kind"] for card in w["helped"]}
+check(kinds == {"significance", "revised_thought", "learning"},
+      f"helpful moments come from all three journals that hold one: {kinds}")
+check(all(card["entry_id"] and card["text"] for card in w["helped"]),
+      "each one carries its entry so she can open the original")
+check(not any("helped" in card["blurb"].lower() or "worked" in card["blurb"].lower() for card in w["helped"]),
+      "and none of them claims it helped — only she can say that")
+
+wins = {win["id"]: win for win in w["wins"]}
+check(wins["thought"]["count"] == 2 and wins["exposure"]["count"] == 1,
+      f"small wins count actions, and the untried step is not one: {[(k, v['count']) for k, v in wins.items()]}")
+check(all(win["count"] > 0 for win in w["wins"]), "nothing she did not do is listed as a win")
+check("2 check-ins" in wins["check_in"]["detail"] and wins["exposure"]["detail"].startswith("1 step "),
+      f"and they are worded for one or many: {wins['check_in']['detail']!r}, {wins['exposure']['detail']!r}")
+
+# Journal-specific sections read their own fields.
+jr = w["journals"]
+check(jr["thought"]["balanced_thoughts"] == 1, "one of the two thought records holds a balanced thought")
+check(jr["savouring"]["moments"][0]["significance"] == "felt looked after", "savouring keeps why it mattered")
+check({t["id"] for t in jr["thought"]["patterns"]} == {"mind_reading", "catastrophising"},
+      "patterns come from thought records, each counted")
+check(jr["exposure"]["planned"] == 2 and jr["exposure"]["attempted"] == 1, "planned and attempted stay apart")
+
+print("--- T2: badges earn from actions, once")
+ids = {b["id"] for b in w["badges"]["new"]}
+check({"first_steps", "finding_my_rhythm", "four_ways_to_reflect", "thought_explorer",
+       "another_perspective", "moment_keeper", "brave_first_step"} <= ids,
+      f"the badges her entries qualify her for: {sorted(ids)}")
+check("pattern_noticer" not in ids, "and not one she has not earned: the pattern appears in a single record")
+again = c.get("/insights/weekly", params={"week_start": MON.isoformat(), "tz_offset": TZ,
+                                          "narrative": False}).json()
+check(again["badges"]["new"] == [], "regenerating the report awards nothing a second time")
+with S() as s:
+    rows = s.query(EarnedBadge).filter(EarnedBadge.account_id == wacct.id).all()
+check(len(rows) == len({r.badge_id for r in rows}), "and no badge is stored twice")
+check(all(r.entry_ids for r in rows), "each one records which entries earned it")
+
+thought_at(at(6), traps=["mind_reading"])  # the same pattern, a second time
+later = c.get("/insights/weekly", params={"week_start": MON.isoformat(), "tz_offset": TZ,
+                                          "narrative": False}).json()
+check("pattern_noticer" in {b["id"] for b in later["badges"]["new"]},
+      "noticing one pattern in two separate records earns Pattern Noticer")
+every = c.get("/insights/badges").json()["badges"]
+check(len(every) == len(bdg.BY_ID) and every[0]["earned"], "the badge screen shows earned and locked, earned first")
+check(all(b["how"] for b in every), "and every badge says what earns it")
+check(not any(word in json.dumps(every).lower()
+              for word in ("recovered", "cured", "streak", "happy", "improved")),
+      "no badge is about mood, streaks, or getting better")
+
+print("--- T3: carry into next week")
+NEXT = MON + timedelta(days=7)
+post("/insights/weekly/reflection", {"week_start": MON.isoformat(), "text": "ek cheez roz likhni hai"})
+saved = c.get("/insights/weekly", params={"week_start": MON.isoformat(), "tz_offset": TZ,
+                                          "narrative": False}).json()
+check(saved["reflection"] == "ek cheez roz likhni hai", "what she chose to carry is saved on her week")
+nxt = c.get("/insights/weekly", params={"week_start": NEXT.isoformat(), "tz_offset": TZ,
+                                        "narrative": False}).json()
+check(nxt["carried_in"] == "ek cheez roz likhni hai", "and shown again at the top of the next week")
+post("/insights/weekly/reflection", {"week_start": MON.isoformat(), "text": "badal di"})
+check(c.get("/insights/weekly", params={"week_start": MON.isoformat(), "tz_offset": TZ,
+                                        "narrative": False}).json()["reflection"] == "badal di",
+      "she can change it")
+post("/insights/weekly/reflection", {"week_start": MON.isoformat(), "text": "   "})
+check(c.get("/insights/weekly", params={"week_start": MON.isoformat(), "tz_offset": TZ,
+                                        "narrative": False}).json()["reflection"] is None,
+      "and take it back")
+check(c.post("/insights/weekly/reflection",
+             json={"week_start": MON.isoformat(), "text": "x" * 400}).status_code == 422,
+      "a reflection is one thought, not an essay")
+
+print("--- T4: empty weeks, history, and whose week it is")
+QUIET = MON - timedelta(days=21)
+empty = c.get("/insights/weekly", params={"week_start": QUIET.isoformat(), "tz_offset": TZ,
+                                          "narrative": False}).json()
+check(empty["overview"]["entries"] == 0 and empty["mood"]["points"] == [] and empty["wins"] == [],
+      "a week with nothing in it says nothing, rather than showing zeros as achievements")
+check(empty["helped"] == [] and empty["journals"]["savouring"]["moments"] == [],
+      "and invents no cards to fill the space")
+weeks = c.get("/insights/weekly/history", params={"tz_offset": TZ}).json()["weeks"]
+check(any(x["week_start"] == MON.isoformat() and x["entries"] == 8 for x in weeks),
+      f"history lists the weeks she wrote in, with their counts: {weeks[:3]}")
+check(QUIET.isoformat() not in [x["week_start"] for x in weeks], "and not the ones she did not")
+check(sum(1 for x in weeks if x["is_current"]) == 1 and weeks[0]["is_current"],
+      "this week is always there to land on, newest first")
+check(c.get("/insights/weekly", params={"tz_offset": TZ, "narrative": False}).json()["is_current"],
+      "no week_start opens this week")
+mid = c.get("/insights/weekly", params={"week_start": (MON + timedelta(days=3)).isoformat(),
+                                        "tz_offset": TZ, "narrative": False}).json()
+check(mid["week_start"] == MON.isoformat(), "any day in a week opens that week")
+
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
+theirs = c.get("/insights/weekly", params={"week_start": MON.isoformat(), "tz_offset": TZ,
+                                           "narrative": False}).json()
+check(inside not in json.dumps(theirs),
+      "one account's week never carries another's entries")
+check(inside not in json.dumps(c.get("/insights/badges").json()),
+      "nor name them in another's badges")
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, wacct.id)
+
+print("--- T5: the narrative may not carry a figure, and may fail")
+real = c.get("/insights/weekly", params={"week_start": MON.isoformat(), "tz_offset": TZ,
+                                         "narrative": False}).json()
+with patch.object(nar.llm_client, "generate_closing", return_value="You wrote 3 entries this week."):
+    check(nar.write(real) is None, "a narrative with a number in it is thrown away, not shown")
+with patch.object(nar.llm_client, "generate_closing", return_value=""):
+    check(nar.write(real) is None, "a model that will not answer leaves the report standing")
+with patch.object(nar.llm_client, "generate_closing",
+                  return_value="Feeling tired came up more than once. What would you like to notice next week?"):
+    check(nar.write(real), "a grounded one is kept")
+check(nar.write(empty) is None, "and a week too thin to describe gets no narrative at all")
+with patch.object(nar.llm_client, "generate_closing") as spy:
+    nar.write(empty)
+check(not spy.called, "which costs nothing: the model is not called for it")
+evidence = nar._evidence(real)
+check("mind_reading" not in evidence and "entry_id" not in evidence,
+      "the model is shown her words and labels, never ids or raw field names")
+
+print("--- U: the check-in follows her, not her mood number")
+settings.OPENAI_API_KEY = None; settings.LLM_MOCK = False
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
+
+
+def asked_at(mood, **answers):
+    """Which values a check-in actually asks for, given these answers."""
+    j = post("/entries", {"journal_type": "check_in"}); u = f"/entries/{j['id']}"
+    _, asked, _ = answer_check_in(u, mood=mood, **answers)
+    return asked
+
+
+WROTE = "kuch chubh raha hai"
+low, mixed, good = asked_at(1, trigger_note=WROTE), asked_at(3), asked_at(5)
+check(low[0] == "mood" and mixed[0] == "mood" and good[0] == "mood",
+      "mood is asked first, because the one condition that reads it needs it")
+check(all("feelings" in path and "feeling_intensity" in path for path in (low, mixed, good)),
+      f"feelings and their strength are asked at every mood: {low}, {mixed}, {good}")
+check(all("trigger_note" in path for path in (low, mixed, good)),
+      "and so is the open note — whatever she rated, she can say what she came to say")
+
+check("triggers" in low and "triggers" in mixed, f"a low or mixed mood is asked what is around it: {mixed}")
+check("triggers" not in good,
+      f"a good mood is not asked what is behind it, because nobody asked that question: {good}")
+check(asked_at(4) == good and asked_at(2, trigger_note=WROTE) == low,
+      "4 and 5 behave alike, and so do 1 and 2")
+
+# Spec 6: a low mood is not evidence of distorted thinking. Something she wrote can be.
+silent = asked_at(1, trigger_note="")
+check("thinking_traps" not in silent,
+      f"a difficult mood on its own never raises the thinking patterns: {silent}")
+check("thinking_traps" in low,
+      f"a note does, because there is something of hers to look at: {low}")
+wrote_at_five = asked_at(5, trigger_note="I keep thinking I ruined it for everyone")
+check("thinking_traps" in wrote_at_five,
+      f"and that holds at a good mood too — the note is what counts, not the number: {wrote_at_five}")
+
+# She can feel good overall and still be carrying something. Nothing closes that off.
+j = post("/entries", {"journal_type": "check_in"}); u = f"/entries/{j['id']}"
+state, asked, _ = answer_check_in(u, mood=5, feelings=["hurt"], feeling_intensity=8,
+                                  trigger_note="achha din tha lekin aik baat chubh gayi")
+check("trigger_note" in asked and state["status"] == "completed",
+      f"a good mood with a hard feeling in it still has somewhere to put it: {asked}")
+recorded = {v.key: v.status for v in S().query(CapturedValue).filter(
+    CapturedValue.entry_id == uuid.UUID(j["id"])).all()}
+check(recorded["feelings"] == "answered" and recorded["feeling_intensity"] == "answered",
+      f"and both are kept as she gave them: {recorded}")
+check(recorded.get("triggers") == "not_asked",
+      "what she was never asked is stored as not_asked, not as a skip")
+
+# A high rating must never suppress a disclosure.
+j = post("/entries", {"journal_type": "check_in"}); u = f"/entries/{j['id']}"
+post(u + "/captures", {"value_id": "mood", "value": 5})
+post(u + "/captures", {"value_id": "feelings", "value": []})
+danger = post(u + "/captures", {"value_id": "trigger_note", "value": "honestly I want to end my life"})
+check(danger["crisis_event"]["tier"] in ("danger", "emergency"),
+      f"a disclosure at mood 5 still reaches the crisis path: {danger['crisis_event']}")
+check(any(m["kind"] == "crisis" for m in danger["messages"]), "with fixed crisis content in the thread")
+finished = post(u + "/captures", {"value_id": "thinking_traps", "value": [], "skipped": True})
+check(finished["status"] == "completed" and finished["conversation_status"] == "suppressed",
+      "the entry still finishes, and no AI is offered after it")
+
+# The feelings list opens where she is, not where the file happens to start.
+def valence_at(mood):
+    j = post("/entries", {"journal_type": "check_in"}); u = f"/entries/{j['id']}"
+    state = post(u + "/captures", {"value_id": "mood", "value": mood})
+    return state["next_capture"]["value_id"], state["next_capture"]["prefer_valence"]
+
+check(valence_at(5) == ("feelings", "positive") and valence_at(4) == ("feelings", "positive"),
+      "a good mood opens the feelings on the good ones")
+check(valence_at(1) == ("feelings", "negative") and valence_at(2) == ("feelings", "negative"),
+      "a difficult mood opens them on the difficult ones")
+check(valence_at(3) == ("feelings", None),
+      "a mixed mood is not sorted into either half")
+# The app passes that straight on to the library (?prefer=), and her own words
+# stay at the top whatever it is.
+def feelings_order(prefer=None):
+    rows = c.get("/libraries/feelings", params={"prefer": prefer} if prefer else {}).json()["categories"]
+    return [cat["id"] for cat in rows if cat["id"] != "my_words"], rows
+
+good, all_good = feelings_order("positive")
+hard, all_hard = feelings_order("negative")
+check(all(cat["valence"] == "positive"
+          for cat in all_good if cat["id"] != "my_words" and good.index(cat["id"]) < 2),
+      f"asking for positive puts the good feelings first: {good}")
+check(hard[0] in ("sad", "worried", "angry", "hurt"),
+      f"and asking for negative puts the difficult ones first: {hard}")
+check(sorted(good) == sorted(hard) == sorted(feelings_order()[0]),
+      "with nothing dropped either way — only the order changes")
+
+# Every point of a 0-10 scale means something, not just the two ends.
+for scale in ("intensity_11", "distress_11"):
+    labels = [o["label"] for o in capture.SCALES[scale]]
+    check(len(labels) == len(set(labels)) == 11 and all(l.strip() for l in labels),
+          f"{scale}: all eleven points carry their own words")
+
+# The intensity scale is asked about whatever feelings she named — joy as often
+# as hurt — so none of its words may treat the feeling as a problem. "Hard to
+# set aside" and "Almost too much" read as nonsense against "joyful", which is
+# how they were found. distress_11 is exempt: it is about distress.
+UNWELCOME = ("too much", "hard to", "set aside", "overwhelm", "severe",
+             "distress", "unbearable", "can't", "cannot")
+offending = [o["label"] for o in capture.SCALES["intensity_11"]
+             if any(word in o["label"].lower() for word in UNWELCOME)]
+check(not offending,
+      f"intensity words fit a good feeling as well as a hard one: {offending}")
+
+check(capture.fallback_wording("check_in", "trigger_note"), "the note has stored wording to fall back on")
+check("good_note" not in json.dumps(capture.SCHEDULES["check_in"]),
+      "the 'say something positive' step is gone — it had no place at a hard moment")
+# The model words every capture prompt, so a value it has never been told about
+# gets whatever the id happens to suggest. That is how a good mood came to be
+# asked for "something positive" while she was saying she felt hurt.
+described = md_loader.load_capture_instructions()
+undescribed = sorted({v["id"] for values in capture.SCHEDULES.values() for v in values}
+                     - {value_id for value_id in capture.all_value_ids() if f"`{value_id}`" in described})
+print("--- V2: the thought journal, per-feeling ratings and going back")
+settings.OPENAI_API_KEY = None; settings.LLM_MOCK = False
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
+
+
+def walk_thought(answers):
+    """Drive a thought journal from next_capture, collecting each spec it sends."""
+    j = post("/entries", {"journal_type": "thought"}); u = f"/entries/{j['id']}"
+    specs = []
+    while j["next_capture"]:
+        spec = j["next_capture"]; specs.append(spec)
+        value = answers.get(spec["value_id"])
+        j = post(u + "/captures", {"value_id": spec["value_id"], "value": value,
+                                   "skipped": value is None})
+    return u, j, specs
+
+
+TJ = {"name": "message seen", "situation": "msg dekha, jawab nahi aaya",
+      "automatic_thought": "woh mujhse naraz hai", "feelings": ["hurt", "worried"],
+      "emotions_before": {"hurt": 80, "worried": 60}, "thinking_traps": ["mind_reading"],
+      "supporting_evidence": "kal bhi khafa thi", "contradicting_evidence": "woh busy bhi hoti hai",
+      "revised_thought": "pata nahi, shayad busy hai", "emotions_after": {"hurt": 40, "worried": 30}}
+u, j, specs = walk_thought(TJ)
+order = [sp["value_id"] for sp in specs]
+check(order.index("feelings") < order.index("thinking_traps"),
+      f"the feelings are named before the patterns: {order}")
+check(order.index("emotions_before") < order.index("revised_thought") < order.index("emotions_after"),
+      "the second rating comes after the work, not before it")
+
+# The rating card is built from what she chose, not from the whole library.
+rating = next(sp for sp in specs if sp["value_id"] == "emotions_before")
+check([i["id"] for i in rating["rates"]["items"]] == ["hurt", "worried"],
+      f"a rating only lists the feelings she chose: {rating['rates']['items']}")
+check([i["name"] for i in rating["rates"]["items"]] == ["Hurt", "Worried"], "with their names")
+check((rating["rates"]["min"], rating["rates"]["max"]) == (0, 100), "rated 0-100, as the brief asks")
+after = next(sp for sp in specs if sp["value_id"] == "emotions_after")
+check(after["rates"]["carried"] == {"hurt": 80, "worried": 60},
+      "the second rating starts from the first, so she adjusts rather than starts over")
+
+# Step counts are counted, never hardcoded: every step within the total, in order.
+steps = [(sp["step"], sp["total"]) for sp in specs]
+check(all(1 <= a <= b for a, b in steps), f"every step is inside its total: {steps}")
+check([a for a, _ in steps] == sorted({a for a, _ in steps}), f"steps only go forward: {steps}")
+check(j["status"] == "completed", "the entry completes")
+
+# Going back. /captures stays forward-only; the revision is its own request.
+again = c.post(u + "/captures", json={"value_id": "revised_thought", "value": "phir se"})
+check(again.status_code == 200 and "phir se" not in [m["content"] for m in again.json()["messages"]],
+      "/captures treats a repeat as the lost-response retry it is, and changes nothing")
+r = c.patch(u + "/captures/revised_thought", json={"value": "woh busy thi, baat mujh par nahi thi"})
+check(r.status_code == 200, f"but it can be revised ({r.status_code})")
+with S() as w:
+    rows = {v.key: v for v in w.query(CapturedValue).filter(
+        CapturedValue.entry_id == uuid.UUID(u.split("/")[-1])).all()}
+    check(json.loads(rows["revised_thought"].value) == "woh busy thi, baat mujh par nahi thi",
+          "the stored answer is the revised one")
+said = [m["content"] for m in r.json()["messages"] if m["value_id"] == "revised_thought"]
+check("pata nahi, shayad busy hai" in said and "woh busy thi, baat mujh par nahi thi" in said,
+      f"both versions stay in the thread — nothing she wrote is destroyed: {said}")
+
+# Dropping a feeling drops its ratings with it.
+r = c.patch(u + "/captures/feelings", json={"value": ["hurt"]})
+check(r.status_code == 200, "the feelings can be revised too")
+with S() as w:
+    rows = {v.key: v for v in w.query(CapturedValue).filter(
+        CapturedValue.entry_id == uuid.UUID(u.split("/")[-1])).all()}
+    check(json.loads(rows["emotions_before"].value) == {"hurt": 80},
+          f"a dropped feeling takes its rating with it: {rows['emotions_before'].value}")
+    check(json.loads(rows["emotions_after"].value) == {"hurt": 40}, "in both ratings")
+
+# What a revision may not do.
+check(c.patch(u + "/captures/emotions_before", json={"value": {"worried": 50}}).status_code == 422,
+      "a rating of a feeling she no longer lists is refused")
+check(c.patch(u + "/captures/emotions_before", json={"value": {"hurt": 140}}).status_code == 422,
+      "a rating outside 0-100 is refused")
+check(c.patch(u + "/captures/situation", json={"value": None, "skipped": True}).status_code == 422,
+      "a required answer cannot be revised into nothing")
+check(c.patch(u + "/captures/mood", json={"value": 3}).status_code == 404,
+      "a value this journal never asked for is not an answer to revise")
+
+# Another account cannot reach it, revision or not (ownership, not a client id).
+other = Account(email="revise@x.com")
+with S() as w:
+    w.add(other); w.commit(); w.refresh(other); other_id = other.id
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, other_id)
+check(c.patch(u + "/captures/revised_thought", json={"value": "mera nahi hai"}).status_code == 404,
+      "someone else" + chr(39) + "s entry is not there to be revised")
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
+
+# Once Echo has read the answers and replied to them, they are no longer open:
+# the transcript would otherwise describe something she never said.
+u2, j2, _ = walk_thought(TJ)
+j2 = post(u2 + "/conversation", {"choice": "stop"})
+check(j2["conversation_status"] == "declined", "turning the conversation down is not having one")
+check(c.patch(u2 + "/captures/situation", json={"value": "kuch aur"}).status_code == 200,
+      "and leaves her free to change what she wrote — nothing has read it")
+with S() as w:
+    row = w.get(Entry, uuid.UUID(u2.split("/")[-1])); row.conversation_status = "active"; w.commit()
+check(c.patch(u2 + "/captures/situation", json={"value": "kuch aur phir"}).status_code == 409,
+      "but once Echo has replied to her answers, they are not rewritten underneath it")
+
+# What the two ratings add up to in Insights. Its own account, so the averages
+# are of these three entries and nothing else in the suite.
+rater = Account(email="ratings@x.com")
+with S() as w:
+    w.add(rater); w.commit(); w.refresh(rater); rater_id = rater.id
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, rater_id)
+for before, after in (({"hurt": 80, "worried": 50}, {"hurt": 40, "worried": 60}),
+                      ({"hurt": 70}, {"hurt": 50}),
+                      ({"hurt": 60}, {"hurt": 30})):
+    walk_thought({**TJ, "feelings": list(before),
+                  "emotions_before": before, "emotions_after": after})
+shifts = {r["id"]: r for r in c.get("/insights", params={"period": "30d"}).json()["rating_shifts"]}
+check(shifts["hurt"]["entries"] == 3 and shifts["worried"]["entries"] == 1,
+      f"a feeling is compared only in the entries that rated it twice: {shifts}")
+check((shifts["hurt"]["before"], shifts["hurt"]["after"]) == (70, 40),
+      f"before and after are her own numbers, averaged: {shifts['hurt']}")
+check(shifts["hurt"]["change"] == -30, "and the change is the direction between them")
+check(shifts["worried"]["change"] == 10,
+      "a feeling that went up is reported going up — nothing assumes she felt better")
+check(shifts["hurt"]["label"] == "Hurt", "named as she saw it named")
+check(list(shifts) == ["hurt", "worried"], "the most-rated feeling comes first, not the alphabet")
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
+
+print("--- V3: another perspective, offered only when she asks")
+settings.OPENAI_API_KEY = "test"
+perspective_calls = []
+
+
+def parse_perspective(**kw):
+    fmt = kw["text_format"]
+    if fmt is lc.CapturePrompt:
+        want = kw["instructions"].split("# Value to request\n")[1].strip()
+        return SimpleNamespace(output_parsed=lc.CapturePrompt(value_id=want, message_text=f"AI asks {want}"))
+    if fmt is lc.DomainResult:
+        return SimpleNamespace(output_parsed=lc.DomainResult(safety=NO_HARM, domains=["general"], risk_tier="clear"))
+    if fmt is lc.Perspective:
+        perspective_calls.append(kw["instructions"])
+        return SimpleNamespace(output_parsed=lc.Perspective(
+            message_text="Uska jawab na dena kaafi mehsoos hota hai. Ho sakta hai woh busy ho, "
+                         "aur yeh dono baatein saath sach ho sakti hain."))
+    raise AssertionError(fmt)
+
+
+fake3 = MagicMock(); fake3.responses.parse.side_effect = parse_perspective
+with patch.object(lc, "_get_client", return_value=fake3):
+    j = post("/entries", {"journal_type": "thought"}); up = f"/entries/{j['id']}"
+    check(c.post(up + "/perspective").status_code == 409,
+          "nothing to offer a perspective on before the thought is written")
+    post(up + "/captures", {"value_id": "name", "value": None, "skipped": True})
+    post(up + "/captures", {"value_id": "situation", "value": "msg dekha, jawab nahi aaya"})
+    post(up + "/captures", {"value_id": "automatic_thought", "value": "woh mujhse naraz hai"})
+    r = c.post(up + "/perspective")
+    check(r.status_code == 200, f"once it is, she can ask for another angle ({r.status_code})")
+    j = r.json()
+    offered = [m for m in j["messages"] if m["kind"] == "perspective"]
+    check(len(offered) == 1 and offered[0]["role"] == "ai",
+          "it arrives as Echo's, under its own kind, so the app can label it")
+    check(all(m["kind"] != "capture_answer" or "busy ho" not in m["content"] for m in j["messages"]),
+          "and is never written into an answer of hers")
+    with S() as w:
+        saved = w.query(CapturedValue).filter(
+            CapturedValue.entry_id == uuid.UUID(up.split("/")[-1]),
+            CapturedValue.key == "revised_thought").first()
+    check(saved is None, "the balanced thought is still hers to write, and still unwritten")
+    check(j["next_capture"]["value_id"] == "feelings",
+          f"asking for it does not move the entry on: {j['next_capture']['value_id']}")
+    check(c.post(up + "/perspective").status_code == 409, "and it is offered once, not on tap")
+
+    sent = perspective_calls[0]
+    check("woh mujhse naraz hai" in sent, "the suggestion is built from what she recorded")
+    check("Roman Urdu" in sent, "and answers in the script she has been writing in")
+    check("suggestion she may take, change, or throw away" in sent,
+          "the prompt says plainly that it is hers to reject")
+    for value_id in ("mood", "distress_before"):
+        check(value_id not in sent, f"with nothing from another journal in it ({value_id})")
+
+    jc = post("/entries", {"journal_type": "check_in"})
+    check(c.post(f"/entries/{jc['id']}/perspective").status_code == 409,
+          "it belongs to the thought journal, not to every entry")
+
+# When it cannot be written, nothing stands in for it: no stored line pretends
+# to be a suggestion, and her own answer was never waiting on it.
+with patch.object(lc, "generate_perspective", return_value=None):
+    j = post("/entries", {"journal_type": "thought"}); uq = f"/entries/{j['id']}"
+    post(uq + "/captures", {"value_id": "name", "value": None, "skipped": True})
+    post(uq + "/captures", {"value_id": "situation", "value": "x"})
+    post(uq + "/captures", {"value_id": "automatic_thought", "value": "y"})
+    r = c.post(uq + "/perspective")
+    check(r.status_code == 503, f"a suggestion nobody wrote is not offered ({r.status_code})")
+    check(c.get(uq).json()["next_capture"] is not None, "and the entry carries on regardless")
+settings.OPENAI_API_KEY = None
+
+check(not undescribed, f"every value any journal asks for is described to the model: missing {undescribed}")
+
+# An example written in the same shape as the live prompt gets read as the live
+# prompt. "feelings = Hurt" sat in an illustration of what NOT to say, and the
+# model lifted it into a real question on an entry where feelings was skipped.
+# Every example's data must stay inside a fence that says it is invented.
+LIVE_SHAPE = ("recorded:", "asking for:", "previous answer", "previous answers",
+              "value to request", "mood =", "feelings =", "feeling_intensity =")
+FENCE = "`" * 3
+fenced, loose, unlabelled = False, [], []
+for line in described.splitlines():
+    stripped = line.strip()
+    if stripped.startswith(FENCE):
+        if not fenced and "invented" not in stripped:
+            unlabelled.append(stripped[:60])
+        fenced = not fenced
+        continue
+    if not fenced and any(stripped.lower().startswith(shape) for shape in LIVE_SHAPE):
+        loose.append(stripped[:60])
+check(not loose, f"example data is fenced, so it cannot be mistaken for this entry: {loose}")
+check(not fenced, "every example fence in the capture instructions is closed")
+check(not unlabelled, f"each example says its contents are invented: {unlabelled}")
+
+# A bad example written as a quotable sentence is a template: with one spelled
+# out, 5 of 6 generated notes opened with its first sentence verbatim. Name the
+# mistake instead, so there is nothing to copy.
+quoted_bad = [line.strip()[:60] for line in described.splitlines()
+              if line.strip().lower().startswith("bad:") and chr(34) in line]
+check(not quoted_bad, f"no example quotes a bad message word for word: {quoted_bad}")
 
 print(f"\nALL {ok} CHECKS PASSED")

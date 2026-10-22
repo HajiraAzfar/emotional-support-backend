@@ -229,6 +229,24 @@ def build_capture_prompt(
     return "\n\n".join(sections)
 
 
+def build_perspective_prompt(
+    focus_codes: list[str],
+    entry_summary: str,
+    reply_language: str = language.ENGLISH,
+) -> str:
+    """
+    The "another perspective" suggestion in a thought journal. She asked for it,
+    so it is generated from what she recorded and nothing else - no chat history,
+    no other entries (FR-AIR-002).
+    """
+    sections = [md_loader.load_perspective()]
+    sections.append("# Clinical context (guardrails - follow these)")
+    sections += [md_loader.load("clinical_context", c) for c in clinical_codes(focus_codes)]
+    sections.append(f"# Recorded so far\n{entry_summary}")
+    sections.append(f"# Reply language\n{language.instruction(reply_language)}")
+    return "\n".join(sections)
+
+
 _CLOSING_INSTRUCTIONS = """\
 You are Echo, a journaling companion in a mobile app. You are not a therapist.
 The user has just finished a journal entry that ends without a conversation.

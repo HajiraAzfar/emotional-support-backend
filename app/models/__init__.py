@@ -10,3 +10,5 @@ from app.models.crisis_event import CrisisEvent
 from app.models.user_term import UserTerm
 from app.models.questionnaire_response import QuestionnaireResponse
 from app.models.library_favourite import LibraryFavourite
+from app.models.earned_badge import EarnedBadge
+from app.models.weekly_reflection import WeeklyReflection

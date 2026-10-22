@@ -1,12 +1,18 @@
 """
 Insights (SRS 4.10): counts and series from this account's completed entries.
-Read-only — this router never writes anything.
+
+Mostly read-only. The weekly report writes in two narrow places: it awards the
+badges she has become eligible for, and it saves the line she chooses to carry
+into next week. Both are hers, both are deterministic, and neither is anything
+the model decided.
 """
+from datetime import date
+
 from fastapi import APIRouter, Depends, HTTPException, Query, status
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core import insights, questionnaire
+from app.core import badges, insights, narrative, questionnaire, weekly
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.account import Account
@@ -75,3 +81,80 @@ def decline_questionnaire(
     """FR-INS-017: declining is a first-class answer; the next offer waits the same period."""
     questionnaire.decline(db, account.id)
     return {"recorded": True}
+
+
+# --- Your Week in Reflection ------------------------------------------------
+
+# Long enough for a sentence she means, short enough to stay a single thought.
+REFLECTION_MAX = 300
+
+
+class WeeklyReflectionIn(BaseModel):
+    week_start: date
+    # Empty clears it: she can take back what she wrote.
+    text: str = Field(default="", max_length=REFLECTION_MAX)
+
+
+def _terms(db: Session, account: Account) -> dict:
+    return {
+        term.item_id: term.name
+        for term in db.query(UserTerm).filter(UserTerm.account_id == account.id).all()
+    }
+
+
+def _monday(week_start: date | None, tz_offset: int) -> date:
+    """Any day in a week opens that week; no argument means this one."""
+    if week_start is None:
+        return weekly.current_week_start(tz_offset)
+    return weekly.week_start_for(week_start)
+
+
+@router.get("/weekly")
+def get_weekly(
+    week_start: date | None = Query(None),
+    tz_offset: int = Query(0, ge=TZ_OFFSET_MIN, le=TZ_OFFSET_MAX),
+    narrative_text: bool = Query(True, alias="narrative"),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_user),
+):
+    """
+    One week, counted from her entries. The narrative is added on top and is
+    allowed to fail: `narrative` comes back null and the rest still stands.
+    """
+    report = weekly.build(db, account.id, _monday(week_start, tz_offset), _terms(db, account),
+                          tz_offset=tz_offset)
+    report["narrative"] = narrative.write(report) if narrative_text else None
+    return report
+
+
+@router.get("/weekly/history")
+def get_weekly_history(
+    tz_offset: int = Query(0, ge=TZ_OFFSET_MIN, le=TZ_OFFSET_MAX),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_user),
+):
+    """The weeks she can open, newest first."""
+    return {"weeks": weekly.history(db, account.id, tz_offset=tz_offset)}
+
+
+@router.post("/weekly/reflection")
+def save_weekly_reflection(
+    payload: WeeklyReflectionIn,
+    tz_offset: int = Query(0, ge=TZ_OFFSET_MIN, le=TZ_OFFSET_MAX),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_user),
+):
+    """"Carry into next week" — saved only because she chose to, and editable."""
+    week = weekly.week_start_for(payload.week_start)
+    return {"week_start": week.isoformat(),
+            "text": weekly.save_reflection(db, account.id, week, payload.text)}
+
+
+@router.get("/badges")
+def get_badges(
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_user),
+):
+    """Every badge with its rule, earned first. Locked ones show what earns them."""
+    badges.evaluate(db, account.id)
+    return {"badges": badges.all_for(db, account.id)}

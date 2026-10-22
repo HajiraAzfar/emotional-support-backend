@@ -1,0 +1,77 @@
+{
+  "_comment": "Badges recognise reflection and effort, never mood. Nothing here is earned by feeling better, keeping a streak, or scoring well, and nothing implies recovery or treatment working. Every rule is deterministic and evaluated in app/core/badges.py against completed entries only; the model never awards a badge. 'how' is shown to the user so an earned badge is always explainable.",
+  "badges": [
+    {
+      "id": "first_steps",
+      "name": "First Steps",
+      "description": "You wrote your first entry.",
+      "how": "Saved one journal entry.",
+      "category": "exploring",
+      "icon": "Footprints"
+    },
+    {
+      "id": "finding_my_rhythm",
+      "name": "Finding My Rhythm",
+      "description": "You came back, on your own days.",
+      "how": "Wrote on three different days.",
+      "category": "exploring",
+      "icon": "CalendarCheck"
+    },
+    {
+      "id": "four_ways_to_reflect",
+      "name": "Four Ways to Reflect",
+      "description": "You have tried every kind of journal here.",
+      "how": "Completed at least one check-in, savouring, thought record and exposure reflection.",
+      "category": "exploring",
+      "icon": "LayoutGrid"
+    },
+    {
+      "id": "thought_explorer",
+      "name": "Thought Explorer",
+      "description": "You looked closely at a thought instead of carrying it.",
+      "how": "Completed your first thought record.",
+      "category": "learning",
+      "icon": "Search"
+    },
+    {
+      "id": "another_perspective",
+      "name": "Another Perspective",
+      "description": "You found a different way to see something.",
+      "how": "Wrote a balanced alternative thought.",
+      "category": "learning",
+      "icon": "Lightbulb"
+    },
+    {
+      "id": "pattern_noticer",
+      "name": "Pattern Noticer",
+      "description": "You spotted the same thinking pattern more than once.",
+      "how": "Noticed one thinking pattern in two or more separate thought records.",
+      "category": "learning",
+      "icon": "Repeat"
+    },
+    {
+      "id": "moment_keeper",
+      "name": "Moment Keeper",
+      "description": "You held on to something good.",
+      "how": "Saved your first savouring moment.",
+      "category": "noticing",
+      "icon": "Flower2"
+    },
+    {
+      "id": "learning_to_notice",
+      "name": "Learning to Notice",
+      "description": "You have written down what you are learning about yourself.",
+      "how": "Recorded three separate learnings — from a thought record, a savouring moment, or an exposure step.",
+      "category": "noticing",
+      "icon": "Eye"
+    },
+    {
+      "id": "brave_first_step",
+      "name": "Brave First Step",
+      "description": "You reflected on something you had been avoiding.",
+      "how": "Completed your first exposure reflection.",
+      "category": "noticing",
+      "icon": "Sprout"
+    }
+  ]
+}

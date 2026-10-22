@@ -16,10 +16,24 @@ class ScaleOption(BaseModel):
     label: str
 
 
+class RatedItem(BaseModel):
+    id: str
+    name: str
+
+
+class RatingSet(BaseModel):
+    """A rating per item she already chose, and the ends of the range."""
+    items: list[RatedItem]
+    min: int
+    max: int
+    # Ratings she gave the same items earlier, to adjust rather than start over.
+    carried: dict[str, int] | None = None
+
+
 class CaptureSpec(BaseModel):
     """The value currently being requested, and the control to render for it (FR-ENT-025)."""
     value_id: str
-    control: Literal["scale", "multi_select", "free_text"]
+    control: Literal["scale", "multi_select", "free_text", "rating_set"]
     required: bool
     library: str | None = None
     scale: list[ScaleOption] | None = None
@@ -30,17 +44,31 @@ class CaptureSpec(BaseModel):
     prefer_valence: str | None = None
     # She may speak this answer instead of typing it.
     voice: bool = False
+    # rating_set only: what to rate, and the range to rate it on.
+    rates: RatingSet | None = None
+    # Which step of this entry she is on, out of how many it will ask. Counted
+    # from the schedule and her answers, so a branch never fakes a denominator.
+    step: int | None = None
+    total: int | None = None
 
 
 class CaptureAnswer(BaseModel):
     value_id: str
-    # int for a scale, list of library ids for multi_select, text for free_text.
-    value: int | list[str] | str | None = None
+    # int for a scale, list of library ids for multi_select, text for free_text,
+    # {item id: rating} for rating_set.
+    value: int | list[str] | str | dict[str, int] | None = None
     skipped: bool = False
     # Repeatable values only: she is still writing, so keep this value open
     # and do not move on yet.
     more: bool = False
     # Made by the app for this answer: a retry after a lost response is recorded once.
+    client_id: uuid.UUID | None = None
+
+
+class CaptureRevision(BaseModel):
+    """A changed answer to a value already recorded. The value_id is in the path."""
+    value: int | list[str] | str | dict[str, int] | None = None
+    skipped: bool = False
     client_id: uuid.UUID | None = None
 
 

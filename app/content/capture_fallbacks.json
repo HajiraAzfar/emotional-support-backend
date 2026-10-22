@@ -4,8 +4,8 @@
   "check_in": {
     "mood": "How are you feeling right now?",
     "triggers": "Is anything in particular behind that? Pick any that fit.",
-    "trigger_note": "Would you like to say a little more about it?",
-    "thinking_traps": "Did any of these thinking patterns show up? Pick any that fit.",
+    "trigger_note": "Anything else you'd like to put down?",
+    "thinking_traps": "Looking at what you wrote — did any of these fit how you were reading it?",
     "feelings": "Which feelings are here with you right now?",
     "feeling_intensity": "How strong is that, right now?"
   },
@@ -25,12 +25,13 @@
     "name": "What would you like to call this entry?",
     "situation": "What was happening when the thought showed up?",
     "automatic_thought": "What was the thought, in the words it came in?",
-    "thinking_traps": "Did any of these thinking patterns show up with it? Pick any that fit.",
     "feelings": "What did you feel in that moment?",
-    "feeling_intensity": "How strong was that feeling at the time?",
+    "emotions_before": "How strong was each of those feelings at the time?",
+    "thinking_traps": "Did any of these thinking patterns show up with it? Pick any that fit.",
     "supporting_evidence": "What makes that thought feel true?",
     "contradicting_evidence": "And is there anything that doesn't fit the thought?",
-    "revised_thought": "Knowing all that, how would you put the thought now?"
+    "revised_thought": "Knowing all that, how would you put the thought now?",
+    "emotions_after": "And how do those same feelings sit now?"
   },
   "exposure": {
     "feared_outcome": "What are you afraid will happen?",

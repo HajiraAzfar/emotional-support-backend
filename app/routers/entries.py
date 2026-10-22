@@ -48,6 +48,7 @@ from app.models.message import Message
 from app.models.user_term import UserTerm
 from app.schemas.entry import (
     CaptureAnswer,
+    CaptureRevision,
     CheckInCreate,
     CheckInOut,
     ConversationChoice,
@@ -199,11 +200,14 @@ def _state(db: Session, entry: Entry, account: Account, crisis_event: crisis.Cri
     # FR-JRN-006: nor while the entry is waiting for her to go and do it.
     pending_resume = _paused(db, entry)
     if entry.status == "in_progress" and not pending_notice and not pending_resume:
-        spec = _open_value(db, entry, account) or capture.next_value(
-            _values(db, entry, account), _recorded(db, entry)
-        )
+        recorded = _recorded(db, entry)
+        values = _values(db, entry, account)
+        spec = _open_value(db, entry, account) or capture.next_value(values, recorded)
         if spec:
-            next_capture = capture.spec_out(spec)
+            # The answers so far decide more than the order: at a good mood the
+            # feelings list opens on the good feelings, and a rating only ever
+            # lists the feelings she actually chose.
+            next_capture = capture.spec_out(spec, recorded, values, _user_terms(db, account))
 
     support_note = None
     # AI Chat shows help through the card rules instead (crisis.card_for).
@@ -928,6 +932,10 @@ def submit_capture(
         raise HTTPException(status_code=409, detail=f"Expected value: {spec['id'] if spec else 'none'}")
 
     extra = _user_terms(db, account)
+    # A rating_set may only rate what she actually chose: the validator needs
+    # that list, and only the stored answers know it.
+    if spec["control"] == "rating_set":
+        spec = {**spec, "_rated_ids": _recorded(db, entry).get(spec["rates"]) or []}
     row = _value_row(db, entry, spec["id"]) if spec.get("repeatable") else None
     finishing = bool(spec.get("repeatable")) and not payload.more
 
@@ -973,6 +981,130 @@ def submit_capture(
     db.commit()
     db.refresh(entry)
     return _state(db, entry, account, crisis_event=event)
+
+
+@router.post("/{entry_id}/perspective", response_model=EntryStepOut)
+def another_perspective(
+    entry_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_user),
+):
+    """
+    "Help me explore another perspective" (thought journal, FR-AIR-002): one
+    suggestion, because she pressed the button. It is added to the thread as
+    Echo's, labelled by its kind, and is never written into any answer of hers —
+    the balanced thought stays something she types herself.
+    """
+    entry = _get_entry(db, entry_id, account)
+    if _journal_type(entry) != "thought":
+        raise HTTPException(status_code=409, detail="This is only offered in a thought journal")
+    values = _values(db, entry, account)
+    recorded = _recorded(db, entry)
+    # There is nothing to offer a perspective on until the thought is written.
+    if not recorded.get("automatic_thought"):
+        raise HTTPException(status_code=409, detail="The thought has not been written yet")
+    # One at a time: a button that stacks up suggestions is a slot machine.
+    if any(m.kind == "perspective" for m in _messages(db, entry)):
+        raise HTTPException(status_code=409, detail="A perspective has already been offered")
+
+    text = llm_client.generate_perspective(context_builder.build_perspective_prompt(
+        _focus_codes(db, account),
+        capture.summary(values, recorded, _user_terms(db, account)),
+        reply_language=language.reply_language(_free_text_answers(values, recorded)),
+    ))
+    if text is None:
+        # Nothing stored stands in for this: a suggestion nobody wrote is worse
+        # than none, and her own answer was never waiting on it.
+        raise HTTPException(status_code=503, detail="Couldn't think of another angle just now")
+    _add_message(db, entry, "ai", "perspective", text)
+    db.commit()
+    db.refresh(entry)
+    return _state(db, entry, account)
+
+
+@router.patch("/{entry_id}/captures/{value_id}", response_model=EntryStepOut)
+def revise_capture(
+    entry_id: uuid.UUID,
+    value_id: str,
+    payload: CaptureRevision,
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_user),
+):
+    """
+    Change an answer she has already given, from the review (FR-ENT-024 keeps
+    /captures forward-only: this is the one way back, and it only ever touches a
+    value already recorded, never the position in the schedule).
+
+    The original message stays in the thread and the revision is appended, so
+    nothing she wrote is destroyed and the thread remains the record of what
+    happened. Revised free text is screened again — it has not been read yet.
+    """
+    entry = _get_entry(db, entry_id, account)
+    journal_type = _journal_type(entry)
+    if not capture.has_schedule(journal_type):
+        raise HTTPException(status_code=409, detail="This entry does not record values")
+    # Once the conversation has read her answers and replied to them, changing
+    # them underneath it would make the transcript describe something she never
+    # said.
+    if entry.conversation_status in ("active", "closed"):
+        raise HTTPException(status_code=409, detail="This entry has already been talked through")
+    if _paused(db, entry):
+        raise HTTPException(status_code=409, detail="This entry is waiting until you have done it")
+
+    values = _values(db, entry, account)
+    spec = next((v for v in values if v["id"] == value_id), None)
+    row = _value_row(db, entry, value_id)
+    if spec is None or row is None or row.status == "not_asked":
+        raise HTTPException(status_code=404, detail="That is not an answer in this entry")
+
+    recorded = _recorded(db, entry)
+    extra = _user_terms(db, account)
+    if spec["control"] == "rating_set":
+        spec = {**spec, "_rated_ids": recorded.get(spec["rates"]) or []}
+    try:
+        value = capture.validate(spec, payload.value, payload.skipped, extra)
+    except capture.InvalidAnswer as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+
+    row.value = None if value is None else json.dumps(value, ensure_ascii=False)
+    row.skipped = value is None
+    row.status = "skipped" if value is None else "answered"
+
+    # Anything rating what she just changed can only rate what is still chosen.
+    if spec["control"] == "multi_select":
+        _prune_ratings(db, entry, values, value_id, value or [])
+
+    shown = capture.display_text(spec, value, extra)
+    if shown is not None:
+        _add_message(db, entry, "user", "capture_answer", shown,
+                     value_id=value_id, client_id=payload.client_id)
+    db.commit()
+
+    event = None
+    if shown is not None and spec["control"] == "free_text":
+        event, _, _ = _screen_journal(db, account, entry, value_id, shown, history=[])
+        db.commit()
+    db.refresh(entry)
+    return _state(db, entry, account, crisis_event=event)
+
+
+def _prune_ratings(
+    db: Session, entry: Entry, values: list[dict], rated_id: str, chosen: list[str]
+) -> None:
+    """
+    She removed a feeling, so the ratings of it go with it. A rating set left
+    with nothing to rate becomes a skip, not an empty answer dressed as one.
+    """
+    for spec in values:
+        if spec["control"] != "rating_set" or spec.get("rates") != rated_id:
+            continue
+        row = _value_row(db, entry, spec["id"])
+        if row is None or row.value is None:
+            continue
+        kept = {k: v for k, v in json.loads(row.value).items() if k in chosen}
+        row.value = json.dumps(kept, ensure_ascii=False) if kept else None
+        row.skipped = not kept
+        row.status = "answered" if kept else "skipped"
 
 
 @router.post("/{entry_id}/conversation", response_model=EntryStepOut)

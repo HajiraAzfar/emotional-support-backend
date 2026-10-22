@@ -85,12 +85,26 @@ def skill_descriptions() -> dict[str, str]:
     return descriptions
 
 
+def _app_md(name: str) -> str:
+    """An instruction file at the app root, without its frontmatter."""
+    return _split_frontmatter((APP_DIR / f"{name}.md").read_text(encoding="utf-8").strip())[1]
+
+
 def load_base() -> str:
-    return _split_frontmatter((APP_DIR / "base_instructions.md").read_text(encoding="utf-8").strip())[1]
+    return _app_md("base_instructions")
 
 
 def load_capture_instructions() -> str:
-    return _split_frontmatter((APP_DIR / "capture_instructions.md").read_text(encoding="utf-8").strip())[1]
+    return _app_md("capture_instructions")
+
+
+def load_perspective() -> str:
+    """The "another perspective" suggestion in a thought journal."""
+    return _app_md("perspective")
+
+
+def load_weekly_report() -> str:
+    return _app_md("weekly_report")
 
 
 _missing = set(DOMAINS) - available("skills")

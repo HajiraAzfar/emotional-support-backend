@@ -1,36 +1,118 @@
 {
   "_clinical_status": "DRAFT_NOT_CLINICALLY_APPROVED",
   "mood_5": [
-    {"value": 1, "label": "Very low"},
-    {"value": 2, "label": "Low"},
-    {"value": 3, "label": "Okay"},
-    {"value": 4, "label": "Good"},
-    {"value": 5, "label": "Very good"}
+    {
+      "value": 1,
+      "label": "Very low"
+    },
+    {
+      "value": 2,
+      "label": "Low"
+    },
+    {
+      "value": 3,
+      "label": "Okay"
+    },
+    {
+      "value": 4,
+      "label": "Good"
+    },
+    {
+      "value": 5,
+      "label": "Very good"
+    }
   ],
   "intensity_11": [
-    {"value": 0, "label": "Barely there"},
-    {"value": 1, "label": "Very faint"},
-    {"value": 2, "label": "Slight"},
-    {"value": 3, "label": "Mild but noticeable"},
-    {"value": 4, "label": "Clearly there"},
-    {"value": 5, "label": "Moderate"},
-    {"value": 6, "label": "Strong"},
-    {"value": 7, "label": "Very strong"},
-    {"value": 8, "label": "Hard to set aside"},
-    {"value": 9, "label": "Almost too much"},
-    {"value": 10, "label": "As strong as it gets"}
+    {
+      "value": 0,
+      "label": "Hardly there"
+    },
+    {
+      "value": 1,
+      "label": "Just a trace"
+    },
+    {
+      "value": 2,
+      "label": "Slight"
+    },
+    {
+      "value": 3,
+      "label": "Mild"
+    },
+    {
+      "value": 4,
+      "label": "Noticeable"
+    },
+    {
+      "value": 5,
+      "label": "Moderate"
+    },
+    {
+      "value": 6,
+      "label": "Quite strong"
+    },
+    {
+      "value": 7,
+      "label": "Strong"
+    },
+    {
+      "value": 8,
+      "label": "Very strong"
+    },
+    {
+      "value": 9,
+      "label": "Filling most of me"
+    },
+    {
+      "value": 10,
+      "label": "As strong as it gets"
+    }
   ],
   "distress_11": [
-    {"value": 0, "label": "No distress at all"},
-    {"value": 1, "label": "Barely noticeable"},
-    {"value": 2, "label": "Slight, easy to set aside"},
-    {"value": 3, "label": "Present but manageable"},
-    {"value": 4, "label": "Noticeable, needs some effort to manage"},
-    {"value": 5, "label": "Moderate, hard to ignore"},
-    {"value": 6, "label": "Uncomfortable, affecting focus"},
-    {"value": 7, "label": "Strong, difficult to manage"},
-    {"value": 8, "label": "Very strong, hard to do much else"},
-    {"value": 9, "label": "Severe, overwhelming"},
-    {"value": 10, "label": "The most distress imaginable"}
-  ]
+    {
+      "value": 0,
+      "label": "No distress at all"
+    },
+    {
+      "value": 1,
+      "label": "Barely noticeable"
+    },
+    {
+      "value": 2,
+      "label": "Slight, easy to set aside"
+    },
+    {
+      "value": 3,
+      "label": "Present but manageable"
+    },
+    {
+      "value": 4,
+      "label": "Noticeable, needs some effort to manage"
+    },
+    {
+      "value": 5,
+      "label": "Moderate, hard to ignore"
+    },
+    {
+      "value": 6,
+      "label": "Uncomfortable, affecting focus"
+    },
+    {
+      "value": 7,
+      "label": "Strong, difficult to manage"
+    },
+    {
+      "value": 8,
+      "label": "Very strong, hard to do much else"
+    },
+    {
+      "value": 9,
+      "label": "Severe, overwhelming"
+    },
+    {
+      "value": 10,
+      "label": "The most distress imaginable"
+    }
+  ],
+  "_comment_intensity": "intensity_11 is asked about whatever feelings she named, which may be good, difficult, or both at once. Its words describe how much room the feeling is taking up, never whether it is welcome: nothing here may read as a problem when the feeling is a good one."
 }
