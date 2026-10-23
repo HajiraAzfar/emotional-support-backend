@@ -114,5 +114,218 @@
       "label": "The most distress imaginable"
     }
   ],
-  "_comment_intensity": "intensity_11 is asked about whatever feelings she named, which may be good, difficult, or both at once. Its words describe how much room the feeling is taking up, never whether it is welcome: nothing here may read as a problem when the feeling is a good one."
+  "amount_11": [
+    {
+      "value": 0,
+      "label": "None at all"
+    },
+    {
+      "value": 1,
+      "label": "Barely any"
+    },
+    {
+      "value": 2,
+      "label": "A little"
+    },
+    {
+      "value": 3,
+      "label": "Some"
+    },
+    {
+      "value": 4,
+      "label": "A fair amount"
+    },
+    {
+      "value": 5,
+      "label": "Moderate"
+    },
+    {
+      "value": 6,
+      "label": "Quite a lot"
+    },
+    {
+      "value": 7,
+      "label": "A lot"
+    },
+    {
+      "value": 8,
+      "label": "A great deal"
+    },
+    {
+      "value": 9,
+      "label": "Nearly as much as it gets"
+    },
+    {
+      "value": 10,
+      "label": "As much as it gets"
+    }
+  ],
+  "energy_5": [
+    {
+      "value": 1,
+      "label": "Very low"
+    },
+    {
+      "value": 2,
+      "label": "Low"
+    },
+    {
+      "value": 3,
+      "label": "Okay"
+    },
+    {
+      "value": 4,
+      "label": "Good"
+    },
+    {
+      "value": 5,
+      "label": "Very high"
+    }
+  ],
+  "sleep_hours": [
+    {
+      "value": 3,
+      "label": "Under 4 hours"
+    },
+    {
+      "value": 4,
+      "label": "About 4 hours"
+    },
+    {
+      "value": 5,
+      "label": "About 5 hours"
+    },
+    {
+      "value": 6,
+      "label": "About 6 hours"
+    },
+    {
+      "value": 7,
+      "label": "About 7 hours"
+    },
+    {
+      "value": 8,
+      "label": "About 8 hours"
+    },
+    {
+      "value": 9,
+      "label": "About 9 hours"
+    },
+    {
+      "value": 10,
+      "label": "10 hours or more"
+    }
+  ],
+  "sleep_quality_5": [
+    {
+      "value": 1,
+      "label": "Very poorly"
+    },
+    {
+      "value": 2,
+      "label": "Poorly"
+    },
+    {
+      "value": 3,
+      "label": "Okay"
+    },
+    {
+      "value": 4,
+      "label": "Well"
+    },
+    {
+      "value": 5,
+      "label": "Very well"
+    }
+  ],
+  "day_rating_11": [
+    {
+      "value": 0,
+      "label": "As hard as it gets"
+    },
+    {
+      "value": 1,
+      "label": "Very hard"
+    },
+    {
+      "value": 2,
+      "label": "Hard"
+    },
+    {
+      "value": 3,
+      "label": "Quite hard"
+    },
+    {
+      "value": 4,
+      "label": "A bit hard"
+    },
+    {
+      "value": 5,
+      "label": "Mixed"
+    },
+    {
+      "value": 6,
+      "label": "A bit good"
+    },
+    {
+      "value": 7,
+      "label": "Quite good"
+    },
+    {
+      "value": 8,
+      "label": "Good"
+    },
+    {
+      "value": 9,
+      "label": "Very good"
+    },
+    {
+      "value": 10,
+      "label": "As good as it gets"
+    }
+  ],
+  "plan_3": [
+    {
+      "value": 2,
+      "label": "Yes"
+    },
+    {
+      "value": 1,
+      "label": "Partly"
+    },
+    {
+      "value": 0,
+      "label": "Not really"
+    }
+  ],
+  "yes_no": [
+    {
+      "value": 1,
+      "label": "Yes"
+    },
+    {
+      "value": 0,
+      "label": "No"
+    }
+  ],
+  "phq_4": [
+    {
+      "value": 0,
+      "label": "Not at all"
+    },
+    {
+      "value": 1,
+      "label": "Several days"
+    },
+    {
+      "value": 2,
+      "label": "More than half the days"
+    },
+    {
+      "value": 3,
+      "label": "Nearly every day"
+    }
+  ],
+  "_comment_intensity": "intensity_11 is asked about whatever feelings she named, which may be good, difficult, or both at once. Its words describe how much room the feeling is taking up, never whether it is welcome: nothing here may read as a problem when the feeling is a good one.",
+  "_comment_checkin": "amount_11 is how much of something there was (stress, enjoyment, getting things done); its words name an amount, never a judgement. plan_3 says 'Not really' rather than 'No' so a day that went its own way is not a failure."
 }

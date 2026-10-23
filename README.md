@@ -169,7 +169,7 @@ postman/                      Postman collection with saved example responses
 
 | Journal | Values | Ending |
 |---|---|---|
-| Check-in | mood (1–5), triggers, note, thinking traps, feelings, feeling intensity (0–10) | Conversation offered |
+| Check-in | three a day, each slot with its own questions (see *Check-ins, three a day*); a check-in without a slot (before 23 Oct) asked mood (1–5), triggers, note, thinking traps, feelings, feeling intensity (0–10) | Conversation offered |
 | Savouring | event, why it mattered, feelings (positive first) | One closing message, no conversation (FR-JRN-002) |
 | Thought record | name, situation, automatic thought, traps, feelings, feeling intensity, supporting and contradicting evidence, revised thought | Conversation offered |
 | Thought record, trauma variant | no supporting evidence, situation optional | Fixed grounding message (FR-JRN-005) |
@@ -216,8 +216,23 @@ postman/                      Postman collection with saved example responses
 - Trigger, feeling and trap counts ordered by frequency, each with its change against the previous period, exposure distress per cycle, when in the day she writes, activity calendar, journal type counts.
 - A series carries the ends of its own scale, so no chart hardcodes them.
 - Counts are entries, never percentages (FR-INS-007); nothing is compared with other users (FR-INS-022); only completed entries are counted (FR-INS-023).
-- **The wellbeing questionnaire works, but its instrument is a generic placeholder** (`content/questionnaire.json` says so). Offered every 14 days after the last completion or decline; the score is stored and never shown (FR-INS-018); the trend is drawn as a position between 0 and 1 with no numbers, no severity bands and no condition named (FR-INS-019). The real instrument must come from the Clinical Advisor.
+- **The weekly questionnaires are PHQ-9 and GAD-7**, asked inside the evening check-in (below), so Insights never offers one. The scores are stored and never shown (FR-INS-018); each trend is drawn as a position between 0 and 1 with no numbers, no severity bands and no condition named (FR-INS-019). The older generic placeholder (`content/questionnaire.json`) and its endpoints remain but are no longer offered.
 - FR-INS-012 works: tapping a thinking pattern opens the library article that covers it.
+
+### Check-ins, three a day
+
+A check-in now has a **slot**: morning (05:00–11:59), afternoon (12:00–17:59) or evening (18:00–04:59, which stays that evening's day). Windows are on the user's clock (`core/slots.py`).
+
+- **One per slot per day**: `entries` carries `slot`, `local_date`, `tz_offset` and `timezone`, with a partial unique index (`uq_entries_checkin_slot`). Starting a started slot resumes it; a finished one returns 409.
+- A slot can be done inside its window, and a passed one can still be added until the end of the next day ("missed" is worked out from the clock, never stored); older ones are closed.
+- **Each slot asks its own questions** (`content/capture_schedules/check_in_slots/*.json`). Core in every slot: mood (1–5), stress (0–10), energy (1–5), feelings and how strong each is (0–10). Morning adds sleep, an intention and anything hard ahead; afternoon adds activities, enjoyment, getting things done, a stressful event (its follow-ups only after a Yes: the schedule's `when` key) and coping; evening adds the day's rating, activities, the plan, what helped and what was hard, three Yes/No questions that open the Thought, Saving and Exposure journals, and one win.
+- **PHQ-9 and GAD-7 weekly** (`core/assessments.py`): included in the evening only when none was answered or declined in the week before the entry started; worded exactly as published (`fixed: true`, never by the model); scored into `questionnaire_responses` (`phq9-v1`, `gad7-v1`) when the evening completes, or recorded as declined if left part-way. Severity bands exist for a future clinician report only. Answers cannot be changed afterwards.
+- **Safety**: PHQ-9 item 9 above "Not at all" records a `danger` crisis event (`field = phq9_9`), puts the fixed crisis content in the thread, stops AI for the entry, and the response tells the app to open the crisis resources at once (`crisis_event.show_resources`). `POST /entries/{id}/crisis/acknowledge` stamps `crisis_events.acknowledged_at` when she moves on.
+- **Cross-links**: `POST /entries` with `source_entry_id` (a check-in) opens a journal whose feelings card arrives pre-ticked with the check-in's feelings (`next_capture.preselected`).
+- `GET /entries/check_in/slots?tz_offset=` lists yesterday's and today's six slots: done, started, open, missed, upcoming or closed, with their windows.
+- Reminders are local to the phone (the app's own Android module), one per slot (08:00 / 14:00 / 21:00 by default), so the server stores no reminder settings.
+
+**Setup**: `alembic upgrade head` applies `c3e5a7b9d1f2` (slot columns, the unique index, `source_entry_id`, `crisis_events.acknowledged_at`). `flow_test.py` covers the windows, one-per-slot (API and index), per-slot questions, the `when` rule, PHQ-9/GAD-7 due logic, wording, scoring and bands, item 9, acknowledgement, cross-links and the slots board.
 
 ---
 

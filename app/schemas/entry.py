@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime
+from datetime import date, datetime
 from typing import Literal
 
 from pydantic import BaseModel, Field
@@ -9,6 +9,14 @@ class EntryCreate(BaseModel):
     journal_type: str
     # FR-JRN-006: start a further exposure cycle from a completed one.
     parent_entry_id: uuid.UUID | None = None
+    # Check-in slots (core/slots.py): which one, the day it belongs to (only for
+    # a backfill; otherwise worked out from the clock), and the phone's clock.
+    slot: Literal["morning", "afternoon", "evening"] | None = None
+    local_date: date | None = None
+    tz_offset: int | None = Field(default=None, ge=-840, le=840)
+    timezone: str | None = Field(default=None, max_length=64)
+    # Cross-links: the check-in this journal was opened from.
+    source_entry_id: uuid.UUID | None = None
 
 
 class ScaleOption(BaseModel):
@@ -50,6 +58,10 @@ class CaptureSpec(BaseModel):
     # from the schedule and her answers, so a branch never fakes a denominator.
     step: int | None = None
     total: int | None = None
+    # A published questionnaire item, shown exactly as worded.
+    fixed: bool = False
+    # Items to show already ticked (a journal opened from a check-in), still changeable.
+    preselected: list[str] | None = None
 
 
 class CaptureAnswer(BaseModel):
@@ -94,6 +106,10 @@ class EntryOut(BaseModel):
     # No value is requested until she says she is back.
     pending_resume: bool = False
     parent_entry_id: uuid.UUID | None = None
+    # Check-in slots, and the check-in a journal was opened from.
+    slot: str | None = None
+    local_date: date | None = None
+    source_entry_id: uuid.UUID | None = None
     # FR-CRIS-005: resource reference shown at the end of a completed mild-tier entry.
     support_note: str | None = None
     next_capture: CaptureSpec | None = None
@@ -108,6 +124,8 @@ class CrisisEventOut(BaseModel):
     variant: str | None = None
     # Fixed content (FR-CRIS-008). Emergency content stays on screen until acknowledged (FR-CRIS-007).
     text: str | None = None
+    # Open the crisis resources screen at once (a safety question answered positively).
+    show_resources: bool = False
 
 
 class EntryStepOut(EntryOut):

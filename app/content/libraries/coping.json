@@ -1,0 +1,38 @@
+{
+  "_clinical_status": "DRAFT_NOT_CLINICALLY_APPROVED",
+  "version": "1",
+  "status": "draft — pending clinical review (check-in coping)",
+  "categories": [
+    {
+      "id": "coping",
+      "name": "Coping",
+      "focus_areas": [],
+      "items": [
+        {
+          "id": "breathing",
+          "name": "Breathing"
+        },
+        {
+          "id": "walk",
+          "name": "A walk"
+        },
+        {
+          "id": "talked",
+          "name": "Talked to someone"
+        },
+        {
+          "id": "prayer",
+          "name": "Prayer"
+        },
+        {
+          "id": "distraction",
+          "name": "Distraction"
+        },
+        {
+          "id": "nothing",
+          "name": "Nothing this time"
+        }
+      ]
+    }
+  ]
+}

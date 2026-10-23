@@ -17,6 +17,15 @@ def _read(path: Path) -> Any:
 
 _SCHEDULE_FILES = {p.stem: _read(p) for p in (_CONTENT_DIR / "capture_schedules").glob("*.json")}
 SCHEDULES: dict[str, list[dict]] = {name: f["values"] for name, f in _SCHEDULE_FILES.items()}
+# The check-in's three daily slots (core/slots.py), each with its own questions.
+# They are check-ins: same journal type, same fallbacks, same ending.
+_SLOT_FILES = {p.stem: _read(p) for p in (_CONTENT_DIR / "capture_schedules" / "check_in_slots").glob("*.json")}
+SLOT_SCHEDULES: dict[str, list[dict]] = {slot: f["values"] for slot, f in _SLOT_FILES.items()}
+
+
+def _all_schedules() -> list[tuple[str, list[dict]]]:
+    """(journal type, values) for every schedule, slot schedules included."""
+    return list(SCHEDULES.items()) + [("check_in", values) for values in SLOT_SCHEDULES.values()]
 # What happens after the last value: "offer" the AI conversation (default), "close"
 # it with one closing message (savouring, FR-JRN-002), or "grounding" — a fixed
 # grounding message and no conversation (thought trauma variant, FR-JRN-005/008).
@@ -65,7 +74,15 @@ LIBRARY_NAMES: dict[str, dict[str, str]] = {
 VALUE_TYPES = {"scale", "single_select", "multi_select", "text", "rating_set"}
 SPEC_KEYS = {"id", "value_type", "control", "required", "library", "scale", "max_length", "depends_on",
              "min_mood", "max_mood", "prefer_valence", "valence_follows_mood", "repeatable",
-             "pause_after", "voice", "rates"}
+             "pause_after", "voice", "rates",
+             # Asked only when depends_on was answered with exactly this value (a Yes).
+             "when",
+             # Worded exactly as written in capture_fallbacks.json, never by the
+             # model: a published questionnaire item must not be paraphrased.
+             "fixed",
+             # Part of a weekly questionnaire (core/assessments.py); left out of
+             # the schedule unless that questionnaire is due.
+             "assessment"}
 # A rating_set rates each item of an earlier multi_select on its own, 0-100:
 # one number for several feelings at once never says which one moved.
 RATING_MIN, RATING_MAX = 0, 100
@@ -85,8 +102,21 @@ def _check_no_wording(name: str, schedule: dict) -> None:
 def _check_content() -> None:
     for name, schedule in _SCHEDULE_FILES.items():
         _check_no_wording(name, schedule)
-    for journal_type, values in SCHEDULES.items():
+    for slot, schedule in _SLOT_FILES.items():
+        _check_no_wording(f"check_in:{slot}", schedule)
+        if schedule.get("journal_type") != "check_in" or "variant" in schedule or "ending" in schedule:
+            raise RuntimeError(f"check_in:{slot}: a slot schedule is a plain check-in schedule")
+    for journal_type, values in _all_schedules():
+        ids = [v["id"] for v in values]
+        if len(ids) != len(set(ids)):
+            raise RuntimeError(f"{journal_type}: a value id appears twice")
         for spec in values:
+            if "when" in spec and "depends_on" not in spec:
+                raise RuntimeError(f"{journal_type}.{spec['id']}: `when` needs a depends_on")
+            if spec.get("assessment") and not spec.get("fixed"):
+                raise RuntimeError(f"{journal_type}.{spec['id']}: a questionnaire item must be fixed wording")
+            if spec["control"] == "rating_set" and "scale" in spec and spec["scale"] not in SCALES:
+                raise RuntimeError(f"{journal_type}.{spec['id']}: unknown scale {spec['scale']}")
             # A mood condition can only be judged once mood is recorded.
             if ("min_mood" in spec or "max_mood" in spec) and "mood" not in [v["id"] for v in values[:values.index(spec)]]:
                 raise RuntimeError(f"{journal_type}.{spec['id']}: mood condition but no earlier mood value")
@@ -250,7 +280,7 @@ def has_schedule(journal_type: str) -> bool:
 
 
 def all_value_ids() -> tuple[str, ...]:
-    return tuple(sorted({v["id"] for values in SCHEDULES.values() for v in values}))
+    return tuple(sorted({v["id"] for _, values in _all_schedules() for v in values}))
 
 
 def _variant_applies(journal_type: str, focus_codes: list[str]) -> bool:
@@ -258,11 +288,20 @@ def _variant_applies(journal_type: str, focus_codes: list[str]) -> bool:
     return bool(variant and set(focus_codes) & set(variant["when_focus"]))
 
 
-def values_for(journal_type: str, focus_codes: list[str] | None = None) -> list[dict]:
+def values_for(
+    journal_type: str,
+    focus_codes: list[str] | None = None,
+    slot: str | None = None,
+    assessments: frozenset[str] | set[str] = frozenset(),
+) -> list[dict]:
     """
     The schedule this user gets. The trauma variant drops some values and makes
-    others optional (FR-JRN-005); everyone else gets the base schedule.
+    others optional (FR-JRN-005); everyone else gets the base schedule. A
+    check-in with a slot gets that slot's questions, with each weekly
+    questionnaire included only when it is among `assessments` (due).
     """
+    if journal_type == "check_in" and slot in SLOT_SCHEDULES:
+        return [v for v in SLOT_SCHEDULES[slot] if not v.get("assessment") or v["assessment"] in assessments]
     values = SCHEDULES[journal_type]
     if not _variant_applies(journal_type, focus_codes or []):
         return values
@@ -327,6 +366,9 @@ def _asked(spec: dict, recorded: dict[str, Any]) -> bool:
         answer = recorded.get(depends_on)
         if answer is None or answer == [] or answer == "":
             return False
+        # A follow-up to a Yes is not asked after a No.
+        if "when" in spec and answer != spec["when"]:
+            return False
     mood = recorded.get("mood")
     if mood is not None and not (spec.get("min_mood", mood) <= mood <= spec.get("max_mood", mood)):
         return False
@@ -361,7 +403,7 @@ def scale_bounds(value_id: str) -> tuple[int, int] | None:
     The lowest and highest a value can be recorded as, read from the schedule
     that records it — so a chart never hardcodes the ends of a scale.
     """
-    for values in SCHEDULES.values():
+    for _, values in _all_schedules():
         for spec in values:
             if spec["id"] == value_id and spec["control"] == "scale":
                 points = [option["value"] for option in SCALES[spec["scale"]]]
@@ -403,10 +445,11 @@ def validate(spec: dict, value: Any, skipped: bool, extra: Extra = None) -> Any:
         if not isinstance(value, dict):
             raise InvalidAnswer(f"{spec['id']} must be a mapping of id to rating")
         chosen = spec.get("_rated_ids")
+        low, high = rating_range(spec)
         bad = [k for k, v in value.items()
-               if isinstance(v, bool) or not isinstance(v, int) or not RATING_MIN <= v <= RATING_MAX]
+               if isinstance(v, bool) or not isinstance(v, int) or not low <= v <= high]
         if bad:
-            raise InvalidAnswer(f"{spec['id']} ratings must be whole numbers {RATING_MIN}-{RATING_MAX}: {bad}")
+            raise InvalidAnswer(f"{spec['id']} ratings must be whole numbers {low}-{high}: {bad}")
         if chosen is not None:
             unknown = [k for k in value if k not in chosen]
             if unknown:
@@ -442,9 +485,17 @@ def display_text(spec: dict, value: Any, extra: Extra = None) -> str | None:
     return str(value)
 
 
+def rating_range(spec: dict) -> tuple[int, int]:
+    """A rating_set's range: its own scale's ends when it names one, else 0-100."""
+    if spec.get("scale") in SCALES:
+        points = [option["value"] for option in SCALES[spec["scale"]]]
+        return min(points), max(points)
+    return RATING_MIN, RATING_MAX
+
+
 def _rated_library(spec: dict) -> str:
     """The library whose items a rating_set rates, found from the value it rates."""
-    for values in SCHEDULES.values():
+    for _, values in _all_schedules():
         rated = next((v for v in values if v["id"] == spec.get("rates")), None)
         if rated is not None:
             return rated["library"]
@@ -497,6 +548,8 @@ def spec_out(
         "required": spec["required"],
         "library": spec.get("library"),
         "scale": SCALES[spec["scale"]] if spec["control"] == "scale" else None,
+        # A published questionnaire item: the app shows it as worded, no rewording.
+        "fixed": bool(spec.get("fixed")),
         "max_length": spec.get("max_length"),
         "prefer_valence": valence_for(spec, recorded),
         # FR-JRN-003: free write is one value the user may send in several messages.
@@ -507,7 +560,7 @@ def spec_out(
         # the range, so the app never hardcodes either.
         "rates": (
             {"items": rating_items(spec, recorded, extra),
-             "min": RATING_MIN, "max": RATING_MAX,
+             "min": rating_range(spec)[0], "max": rating_range(spec)[1],
              "carried": recorded.get(_carries_from(spec)) or None}
             if spec["control"] == "rating_set" else None
         ),
@@ -537,6 +590,8 @@ def _ruled_out(spec: dict, recorded: dict[str, Any]) -> bool:
     if depends_on is not None and depends_on in recorded:
         answer = recorded.get(depends_on)
         if answer is None or answer == [] or answer == "":
+            return True
+        if "when" in spec and answer != spec["when"]:
             return True
     mood = recorded.get("mood")
     if mood is not None and not (spec.get("min_mood", mood) <= mood <= spec.get("max_mood", mood)):

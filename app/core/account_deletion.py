@@ -52,7 +52,7 @@ def delete_account(db: Session, account: Account) -> None:
         # Exposure cycles point at their parent entry; clear that first so no
         # row is ever left pointing at one already gone.
         db.query(Entry).filter(Entry.account_id == account.id).update(
-            {Entry.parent_entry_id: None}, synchronize_session=False
+            {Entry.parent_entry_id: None, Entry.source_entry_id: None}, synchronize_session=False
         )
         db.query(Entry).filter(Entry.account_id == account.id).delete(synchronize_session=False)
         db.query(Account).filter(Account.id == account.id).delete(synchronize_session=False)

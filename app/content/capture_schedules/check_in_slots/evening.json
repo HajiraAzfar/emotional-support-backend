@@ -1,0 +1,254 @@
+{
+  "journal_type": "check_in",
+  "_comment": "The day looked back on. Three Yes/No questions open the Thought, Saving and Exposure journals from the review. Once a week PHQ-9 and GAD-7 follow, worded exactly as published (fixed), and only while due.",
+  "values": [
+    {
+      "id": "mood",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "mood_5",
+      "required": true
+    },
+    {
+      "id": "anxiety",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "amount_11",
+      "required": false
+    },
+    {
+      "id": "energy",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "energy_5",
+      "required": false
+    },
+    {
+      "id": "feelings",
+      "value_type": "multi_select",
+      "control": "multi_select",
+      "library": "feelings",
+      "required": false,
+      "valence_follows_mood": true
+    },
+    {
+      "id": "feeling_ratings",
+      "value_type": "rating_set",
+      "control": "rating_set",
+      "rates": "feelings",
+      "depends_on": "feelings",
+      "scale": "intensity_11",
+      "required": false
+    },
+    {
+      "id": "day_rating",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "day_rating_11",
+      "required": false
+    },
+    {
+      "id": "day_activities",
+      "value_type": "multi_select",
+      "control": "multi_select",
+      "library": "activities",
+      "required": false
+    },
+    {
+      "id": "plan_completed",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "plan_3",
+      "required": false
+    },
+    {
+      "id": "what_helped",
+      "value_type": "text",
+      "control": "free_text",
+      "max_length": 500,
+      "required": false,
+      "voice": true
+    },
+    {
+      "id": "what_was_hard",
+      "value_type": "text",
+      "control": "free_text",
+      "max_length": 500,
+      "required": false,
+      "voice": true
+    },
+    {
+      "id": "bothering_thoughts",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "yes_no",
+      "required": false
+    },
+    {
+      "id": "good_moment",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "yes_no",
+      "required": false
+    },
+    {
+      "id": "faced_avoidance",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "yes_no",
+      "required": false
+    },
+    {
+      "id": "win",
+      "value_type": "text",
+      "control": "free_text",
+      "max_length": 300,
+      "required": false,
+      "voice": true
+    },
+    {
+      "id": "phq9_1",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "phq_4",
+      "required": false,
+      "fixed": true,
+      "assessment": "phq9"
+    },
+    {
+      "id": "phq9_2",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "phq_4",
+      "required": false,
+      "fixed": true,
+      "assessment": "phq9"
+    },
+    {
+      "id": "phq9_3",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "phq_4",
+      "required": false,
+      "fixed": true,
+      "assessment": "phq9"
+    },
+    {
+      "id": "phq9_4",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "phq_4",
+      "required": false,
+      "fixed": true,
+      "assessment": "phq9"
+    },
+    {
+      "id": "phq9_5",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "phq_4",
+      "required": false,
+      "fixed": true,
+      "assessment": "phq9"
+    },
+    {
+      "id": "phq9_6",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "phq_4",
+      "required": false,
+      "fixed": true,
+      "assessment": "phq9"
+    },
+    {
+      "id": "phq9_7",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "phq_4",
+      "required": false,
+      "fixed": true,
+      "assessment": "phq9"
+    },
+    {
+      "id": "phq9_8",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "phq_4",
+      "required": false,
+      "fixed": true,
+      "assessment": "phq9"
+    },
+    {
+      "id": "phq9_9",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "phq_4",
+      "required": false,
+      "fixed": true,
+      "assessment": "phq9"
+    },
+    {
+      "id": "gad7_1",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "phq_4",
+      "required": false,
+      "fixed": true,
+      "assessment": "gad7"
+    },
+    {
+      "id": "gad7_2",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "phq_4",
+      "required": false,
+      "fixed": true,
+      "assessment": "gad7"
+    },
+    {
+      "id": "gad7_3",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "phq_4",
+      "required": false,
+      "fixed": true,
+      "assessment": "gad7"
+    },
+    {
+      "id": "gad7_4",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "phq_4",
+      "required": false,
+      "fixed": true,
+      "assessment": "gad7"
+    },
+    {
+      "id": "gad7_5",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "phq_4",
+      "required": false,
+      "fixed": true,
+      "assessment": "gad7"
+    },
+    {
+      "id": "gad7_6",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "phq_4",
+      "required": false,
+      "fixed": true,
+      "assessment": "gad7"
+    },
+    {
+      "id": "gad7_7",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "phq_4",
+      "required": false,
+      "fixed": true,
+      "assessment": "gad7"
+    }
+  ]
+}

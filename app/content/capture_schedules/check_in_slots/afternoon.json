@@ -1,0 +1,98 @@
+{
+  "journal_type": "check_in",
+  "_comment": "What the day has held so far, and whether something stressful happened. The follow-ups about a stressful event are asked only after a Yes.",
+  "values": [
+    {
+      "id": "mood",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "mood_5",
+      "required": true
+    },
+    {
+      "id": "anxiety",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "amount_11",
+      "required": false
+    },
+    {
+      "id": "energy",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "energy_5",
+      "required": false
+    },
+    {
+      "id": "feelings",
+      "value_type": "multi_select",
+      "control": "multi_select",
+      "library": "feelings",
+      "required": false,
+      "valence_follows_mood": true
+    },
+    {
+      "id": "feeling_ratings",
+      "value_type": "rating_set",
+      "control": "rating_set",
+      "rates": "feelings",
+      "depends_on": "feelings",
+      "scale": "intensity_11",
+      "required": false
+    },
+    {
+      "id": "activities",
+      "value_type": "multi_select",
+      "control": "multi_select",
+      "library": "activities",
+      "required": false
+    },
+    {
+      "id": "pleasure",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "amount_11",
+      "required": false
+    },
+    {
+      "id": "achievement",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "amount_11",
+      "required": false
+    },
+    {
+      "id": "stress_event",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "yes_no",
+      "required": false
+    },
+    {
+      "id": "stress_triggers",
+      "value_type": "multi_select",
+      "control": "multi_select",
+      "library": "triggers",
+      "required": false,
+      "depends_on": "stress_event",
+      "when": 1
+    },
+    {
+      "id": "stress_note",
+      "value_type": "text",
+      "control": "free_text",
+      "max_length": 500,
+      "required": false,
+      "depends_on": "stress_event",
+      "when": 1,
+      "voice": true
+    },
+    {
+      "id": "coping",
+      "value_type": "multi_select",
+      "control": "multi_select",
+      "library": "coping",
+      "required": false
+    }
+  ]
+}

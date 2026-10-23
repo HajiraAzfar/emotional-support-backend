@@ -1,0 +1,82 @@
+{
+  "journal_type": "check_in",
+  "_comment": "Under two minutes. The core five first; then the night, the day ahead, and anything about it that feels hard. Everything after mood can be passed with Continue.",
+  "values": [
+    {
+      "id": "mood",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "mood_5",
+      "required": true
+    },
+    {
+      "id": "anxiety",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "amount_11",
+      "required": false
+    },
+    {
+      "id": "energy",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "energy_5",
+      "required": false
+    },
+    {
+      "id": "feelings",
+      "value_type": "multi_select",
+      "control": "multi_select",
+      "library": "feelings",
+      "required": false,
+      "valence_follows_mood": true
+    },
+    {
+      "id": "feeling_ratings",
+      "value_type": "rating_set",
+      "control": "rating_set",
+      "rates": "feelings",
+      "depends_on": "feelings",
+      "scale": "intensity_11",
+      "required": false
+    },
+    {
+      "id": "sleep_hours",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "sleep_hours",
+      "required": false
+    },
+    {
+      "id": "sleep_quality",
+      "value_type": "scale",
+      "control": "scale",
+      "scale": "sleep_quality_5",
+      "required": false
+    },
+    {
+      "id": "intention",
+      "value_type": "text",
+      "control": "free_text",
+      "max_length": 200,
+      "required": false,
+      "voice": true
+    },
+    {
+      "id": "dread_triggers",
+      "value_type": "multi_select",
+      "control": "multi_select",
+      "library": "triggers",
+      "required": false
+    },
+    {
+      "id": "dread_note",
+      "value_type": "text",
+      "control": "free_text",
+      "max_length": 500,
+      "required": false,
+      "depends_on": "dread_triggers",
+      "voice": true
+    }
+  ]
+}

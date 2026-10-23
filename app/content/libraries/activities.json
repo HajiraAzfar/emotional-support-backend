@@ -1,0 +1,46 @@
+{
+  "_clinical_status": "DRAFT_NOT_CLINICALLY_APPROVED",
+  "version": "1",
+  "status": "draft — pending clinical review (check-in activities)",
+  "categories": [
+    {
+      "id": "activities",
+      "name": "Activities",
+      "focus_areas": [],
+      "items": [
+        {
+          "id": "exercise",
+          "name": "Exercise"
+        },
+        {
+          "id": "social",
+          "name": "Time with people"
+        },
+        {
+          "id": "work_study",
+          "name": "Work or study"
+        },
+        {
+          "id": "hobbies",
+          "name": "Hobbies"
+        },
+        {
+          "id": "rest",
+          "name": "Rest"
+        },
+        {
+          "id": "prayer",
+          "name": "Prayer"
+        },
+        {
+          "id": "outdoors",
+          "name": "Outdoors"
+        },
+        {
+          "id": "chores",
+          "name": "Chores"
+        }
+      ]
+    }
+  ]
+}

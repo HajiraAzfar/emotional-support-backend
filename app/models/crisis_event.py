@@ -23,3 +23,6 @@ class CrisisEvent(Base):
     # Which crisis content was shown: full | abbreviated | None (mild shows no interruption).
     variant = Column(String(12), nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
+    # When the user moved on from the crisis content deliberately (tapped
+    # Continue), so a safety flag is never left looking unread.
+    acknowledged_at = Column(DateTime, nullable=True)

@@ -11,7 +11,7 @@ from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from app.core import capture, questionnaire
+from app.core import assessments, capture
 from app.models.captured_value import CapturedValue
 from app.models.entry import Entry
 
@@ -82,6 +82,16 @@ def _label(library: str, item_id: str, user_terms: dict) -> str:
     return capture.LIBRARY_NAMES[library].get(item_id) or user_terms.get(item_id) or item_id
 
 
+def _intensity(recorded: dict) -> int | None:
+    """How strongly feelings were felt in one entry, 0-10, if it recorded that."""
+    if isinstance(recorded.get("feeling_intensity"), int):
+        return recorded["feeling_intensity"]
+    ratings = recorded.get("feeling_ratings")
+    if isinstance(ratings, dict) and ratings:
+        return max(ratings.values())
+    return None
+
+
 def _rating_shifts(entries, values, user_terms) -> list[dict]:
     """
     Per feeling: how it was rated before the thought work and after it, averaged
@@ -115,14 +125,22 @@ def _rating_shifts(entries, values, user_terms) -> list[dict]:
     return sorted(rows, key=lambda r: (-r["entries"], r["change"]))
 
 
-def _counts(entries, values, value_id: str, library: str, user_terms: dict) -> list[dict]:
+# Every value that records triggers: the check-in's own, and the slot
+# check-ins' "something hard ahead" (morning) and "something stressful" (afternoon).
+TRIGGER_VALUES = ("triggers", "dread_triggers", "stress_triggers")
+
+
+def _counts(entries, values, value_id: str | tuple[str, ...], library: str, user_terms: dict) -> list[dict]:
     """
     FR-INS-006/008/010: how many entries each item was selected in, most first.
-    Counts are entries, never percentages (FR-INS-007).
+    Counts are entries, never percentages (FR-INS-007). An item named twice in
+    one entry (in two of its values) counts once for that entry.
     """
+    ids = (value_id,) if isinstance(value_id, str) else value_id
     counted: dict[str, int] = {}
     for entry in entries:
-        for item_id in values.get(entry.id, {}).get(value_id) or []:
+        recorded = values.get(entry.id, {})
+        for item_id in {i for v in ids for i in recorded.get(v) or []}:
             counted[item_id] = counted.get(item_id, 0) + 1
     return [
         {"id": item_id, "name": _label(library, item_id, user_terms), "count": count}
@@ -148,15 +166,17 @@ def build(db: Session, account_id, period: str, user_terms: dict, now: datetime 
     # FR-INS-009: one point per recorded feeling intensity, the same way mood is
     # plotted. Check-in and thought records both carry it, so each point says
     # which journal it came from.
+    # A slot check-in rates each feeling on its own (0-10); its strongest stands
+    # for the entry here, on the same 0-10 line as the older single rating.
     intensity_points = [
         {
             "date": local_date(entry.completed_at, tz_offset).isoformat(),
-            "value": values[entry.id]["feeling_intensity"],
+            "value": _intensity(values[entry.id]),
             "entry_id": str(entry.id),
             "journal_type": entry.journal_type,
         }
         for entry in entries
-        if "feeling_intensity" in values.get(entry.id, {})
+        if _intensity(values.get(entry.id, {})) is not None
     ]
     intensity_bounds = capture.scale_bounds("feeling_intensity") or (0, 10)
     mood_bounds = capture.scale_bounds("mood") or (1, 5)
@@ -167,7 +187,7 @@ def build(db: Session, account_id, period: str, user_terms: dict, now: datetime 
     shifts = _rating_shifts(entries, values, user_terms)
 
     traps = _counts(entries, values, "thinking_traps", "thinking_traps", user_terms)
-    triggers = _counts(entries, values, "triggers", "triggers", user_terms)
+    triggers = _counts(entries, values, TRIGGER_VALUES, "triggers", user_terms)
     feelings = _counts(entries, values, "feelings", "feelings", user_terms)
 
     # FR-INS-011: change against the period just before, when there is enough there to compare.
@@ -177,7 +197,7 @@ def build(db: Session, account_id, period: str, user_terms: dict, now: datetime 
             earlier_values = _values(db, earlier)
             for rows, value_id, library in (
                 (traps, "thinking_traps", "thinking_traps"),
-                (triggers, "triggers", "triggers"),
+                (triggers, TRIGGER_VALUES, "triggers"),
                 (feelings, "feelings", "feelings"),
             ):
                 before = _counts(earlier, earlier_values, value_id, library, user_terms)
@@ -241,10 +261,13 @@ def build(db: Session, account_id, period: str, user_terms: dict, now: datetime 
         "calendar": {"days": days},
         # FR-INS-015 with module 4: days in a row, counted over her whole history.
         "streak": _streak(db, account_id, tz_offset, now, weekly_goal),
-        # FR-INS-017/019: whether to offer it, and the line with no numbers on it.
+        # FR-INS-019: the weekly PHQ-9 and GAD-7 (asked inside the evening
+        # check-in, so never offered here), as lines with no numbers on them.
         "questionnaire": {
-            **questionnaire.status(db, account_id, now),
-            "trend": questionnaire.trend(db, account_id, window.start, window.end),
+            "due": False,
+            "next_due": None,
+            "trend": assessments.trend(db, account_id, assessments.PHQ9, window.start, window.end),
+            "anxiety_trend": assessments.trend(db, account_id, assessments.GAD7, window.start, window.end),
         },
         "journal_types": [
             {"journal_type": name, "count": count}

@@ -141,7 +141,8 @@ s.commit()
 u3, j3, last3 = complete_check_in(note="i want to kill myself")
 check(last3["crisis_event"]["variant"] == "full", "danger after 10 days -> full again")
 cols = {col.name for col in CrisisEvent.__table__.columns}
-check(cols == {"id", "account_id", "entry_id", "field", "tier", "variant", "created_at"}, "detection record has no text column (FR-CRIS-013)")
+check(cols == {"id", "account_id", "entry_id", "field", "tier", "variant", "created_at", "acknowledged_at"},
+      "detection record has no text column (FR-CRIS-013)")
 
 print("--- D: emergency tier in free write")
 j = post("/entries", {"journal_type": "free_write"}); uf = f"/entries/{j['id']}"
@@ -770,7 +771,8 @@ check(not any(k in spec for k in ("score", "max_score", "bands", "condition")),
       f"nothing in the form reveals scoring or what is measured: {sorted(spec)}")
 
 j = c.get("/insights").json()
-check(j["questionnaire"]["due"] is True, "with no history it is offered")
+check(j["questionnaire"]["due"] is False,
+      "Insights never offers a questionnaire now: PHQ-9 and GAD-7 come inside the evening check-in")
 
 r = c.post("/insights/questionnaire", json={"answers": {"q1": 1, "q2": 2, "q3": 0, "q4": 3, "q5": 1}})
 check(r.status_code == 201 and r.json() == {"recorded": True}, f"answers are accepted ({r.status_code})")
@@ -779,31 +781,28 @@ row = S().query(QuestionnaireResponse).first()
 check(row.score == 7 and row.max_score == 15, f"but it is stored ({row.score}/{row.max_score})")
 check(row.outcome == "completed" and row.version == Q.VERSION, "recorded against the instrument version")
 
-j = c.get("/insights").json()
-check(j["questionnaire"]["due"] is False, "and it is not offered again straight away")
-check(j["questionnaire"]["next_due"], f"the next offer has a date ({j['questionnaire']['next_due']})")
-
 bad = c.post("/insights/questionnaire", json={"answers": {"q1": 9, "q2": 0, "q3": 0, "q4": 0, "q5": 0}})
 check(bad.status_code == 422, "a value outside the scale is refused")
 missing = c.post("/insights/questionnaire", json={"answers": {"q1": 1}})
 check(missing.status_code == 422, "so is a half-answered form")
 
-# FR-INS-019: the trend is a position between 0 and 1, never the score
+# FR-INS-019: the trend is a position between 0 and 1, never the score — now
+# drawn from the weekly PHQ-9 (and GAD-7) the evening check-in records.
 with S() as w:
-    row2 = w.get(QuestionnaireResponse, row.id); row2.created_at = datetime.utcnow() - timedelta(days=30); w.commit()
-c.post("/insights/questionnaire", json={"answers": {"q1": 0, "q2": 0, "q3": 1, "q4": 0, "q5": 0}})
+    w.add(QuestionnaireResponse(account_id=acct.id, outcome="completed", version="phq9-v1", score=18, max_score=27,
+                                created_at=datetime.utcnow() - timedelta(days=30)))
+    w.add(QuestionnaireResponse(account_id=acct.id, outcome="completed", version="phq9-v1", score=6, max_score=27))
+    w.commit()
 tr = c.get("/insights", params={"period": "3m"}).json()["questionnaire"]["trend"]
 check(len(tr["points"]) == 2, f"two completions, two points ({len(tr['points'])})")
 check(all(0 <= p["position"] <= 1 for p in tr["points"]), "each point is a position between 0 and 1")
 check(all("score" not in p and "value" not in p for p in tr["points"]), "no score reaches the client")
 check(tr["points"][0]["position"] > tr["points"][1]["position"], "the line moves the way the answers did")
 
-# a decline delays the next offer just as a completion does
+# a decline is stored without a score
 s = S(); s.query(QuestionnaireResponse).delete(); s.commit()
 r = c.post("/insights/questionnaire/decline", json={})
 check(r.status_code == 201, "declining is accepted")
-j = c.get("/insights").json()
-check(j["questionnaire"]["due"] is False, "and it is not offered again for the same wait")
 check(S().query(QuestionnaireResponse).first().score is None, "a decline stores no score")
 
 print("--- W: the learning library (SRS 4.11, FR-INS-012)")
@@ -1839,5 +1838,140 @@ app.dependency_overrides[get_current_user] = lambda: S().get(Account, empty_id)
 r = c.get("/insights/report.pdf?period=7d")
 check(r.status_code == 200 and r.content.startswith(b"%PDF"), "an account with no entries still gets a report, with its empty states")
 app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
+
+print("--- check-in slots: windows and backfill (core/slots.py)")
+from datetime import date as _D
+from sqlalchemy.exc import IntegrityError as _IntegrityError
+from app.core import slots as SL, assessments as AS
+d22 = _D(2026, 10, 22)
+check(SL.slot_at(datetime(2026, 10, 22, 7, 30)) == ("morning", d22), "07:30 is the morning")
+check(SL.slot_at(datetime(2026, 10, 22, 12, 0)) == ("afternoon", d22), "12:00 opens the afternoon")
+check(SL.slot_at(datetime(2026, 10, 22, 18, 0)) == ("evening", d22), "18:00 opens the evening")
+check(SL.slot_at(datetime(2026, 10, 23, 2, 0)) == ("evening", d22), "02:00 is still the evening before")
+check(SL.slot_at(datetime(2026, 10, 23, 5, 0)) == ("morning", _D(2026, 10, 23)), "05:00 is the next morning")
+check(SL.state(d22, "afternoon", datetime(2026, 10, 22, 11, 59)) == "upcoming", "before its window a slot is upcoming")
+check(SL.state(d22, "afternoon", datetime(2026, 10, 22, 17, 59)) == "open", "late in its window it can still be done")
+check(SL.state(d22, "evening", datetime(2026, 10, 23, 4, 59)) == "open", "the evening stays open until 04:59")
+check(SL.state(d22, "morning", datetime(2026, 10, 22, 12, 0)) == "missed", "a passed slot today can still be added")
+check(SL.state(d22, "evening", datetime(2026, 10, 23, 20, 0)) == "missed", "yesterday's can be backfilled")
+check(SL.state(d22, "morning", datetime(2026, 10, 24, 9, 0)) == "closed", "the day before yesterday cannot")
+
+print("--- PHQ-9 / GAD-7 severity bands (clinician report only)")
+check([AS.severity_band("phq9", t) for t in (0, 4, 5, 9, 10, 14, 15, 19, 20, 27)] ==
+      ["minimal", "minimal", "mild", "mild", "moderate", "moderate",
+       "moderately severe", "moderately severe", "severe", "severe"], "PHQ-9 bands at every cut-off")
+check([AS.severity_band("gad7", t) for t in (0, 4, 5, 9, 10, 14, 15, 21)] ==
+      ["minimal", "minimal", "mild", "mild", "moderate", "moderate", "severe", "severe"], "GAD-7 bands at every cut-off")
+try:
+    AS.severity_band("phq9", 28)
+    refused = False
+except ValueError:
+    refused = True
+check(refused, "an impossible total is refused, not banded")
+
+
+def run_slot(entry, answers):
+    """Answer whatever the slot asks next; return the final state and the ids asked, in order."""
+    u, state, asked, seen = f"/entries/{entry['id']}", entry, [], {}
+    while state["next_capture"]:
+        vid = state["next_capture"]["value_id"]
+        asked.append(vid)
+        value = answers.get(vid)
+        state = post(u + "/captures", {"value_id": vid, "value": value, "skipped": value in (None, "", [])})
+        seen[vid] = state
+    return state, asked, seen
+
+
+print("--- check-in slots: one per slot, each with its own questions")
+s = S(); s.query(QuestionnaireResponse).delete(); s.commit()
+with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 22, 8, 30)):
+    m = post("/entries", {"journal_type": "check_in", "slot": "morning", "tz_offset": 300, "timezone": "Asia/Karachi"})
+    check(m["slot"] == "morning" and m["local_date"] == "2026-10-22", "a morning check-in belongs to the user's own day")
+    check(post("/entries", {"journal_type": "check_in", "slot": "morning", "tz_offset": 300})["id"] == m["id"],
+          "starting the same slot again resumes it, never a second one")
+    check(c.post("/entries", json={"journal_type": "check_in", "slot": "evening", "tz_offset": 300}).status_code == 409,
+          "an evening that has not opened yet cannot be started")
+    check(c.post("/entries", json={"journal_type": "check_in", "slot": "evening", "tz_offset": 300,
+                                   "local_date": "2026-10-20"}).status_code == 409, "two days back is too far to backfill")
+    morning = {"mood": 2, "anxiety": 6, "energy": 2, "feelings": ["tired"], "feeling_ratings": {"tired": 7},
+               "sleep_hours": 5, "sleep_quality": 2, "intention": "Rest a little", "dread_triggers": ["workload"],
+               "dread_note": ""}
+    state, asked, _ = run_slot(m, morning)
+    check(asked == list(morning), f"the morning asks its own questions, core ones first: {asked}")
+    check(state["status"] == "completed", "and completes")
+    check(c.post("/entries", json={"journal_type": "check_in", "slot": "morning", "tz_offset": 300}).status_code == 409,
+          "a finished slot is done for that day")
+    w = S()
+    w.add(Entry(account_id=acct.id, journal_type="check_in", status="in_progress", slot="morning", local_date=d22))
+    try:
+        w.commit()
+        duplicate = True
+    except _IntegrityError:
+        w.rollback()
+        duplicate = False
+    check(not duplicate, "the database itself refuses a second check-in for the same slot and day")
+
+with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 22, 13, 0)):
+    a = post("/entries", {"journal_type": "check_in", "slot": "afternoon", "tz_offset": 300})
+    state, asked, _ = run_slot(a, {"mood": 3, "activities": ["work_study", "prayer"], "pleasure": 4, "achievement": 6,
+                                   "stress_event": 0, "coping": ["nothing"]})
+    check("stress_triggers" not in asked and "stress_note" not in asked and "coping" in asked,
+          f"after a No, the stressful-event follow-ups are not asked: {asked}")
+    check(S().query(CapturedValue).filter(CapturedValue.entry_id == uuid.UUID(a["id"]),
+                                         CapturedValue.key == "stress_triggers").first().status == "not_asked",
+          "and they are stored as not asked, never as skipped")
+
+print("--- the evening: cross-links, weekly PHQ-9 / GAD-7, and the safety question")
+phq = [f"phq9_{i}" for i in range(1, 10)]
+gad = [f"gad7_{i}" for i in range(1, 8)]
+evening = {"mood": 2, "feelings": ["tired", "worried"], "day_rating": 4, "plan_completed": 1,
+           "bothering_thoughts": 1, "good_moment": 1, "faced_avoidance": 0,
+           **{k: 1 for k in phq}, **{k: 2 for k in gad}}
+with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 22, 20, 0)):
+    e = post("/entries", {"journal_type": "check_in", "slot": "evening", "tz_offset": 300})
+    state, asked, seen = run_slot(e, evening)
+check(asked[-16:] == phq + gad, "with none in the last week, PHQ-9 then GAD-7 close the evening")
+fixed_prompts = {m["value_id"]: m["content"] for m in state["messages"] if m["kind"] == "capture_prompt"}
+check(fixed_prompts["phq9_2"] == capture.FALLBACKS["check_in"]["phq9_2"]
+      and fixed_prompts["gad7_7"] == capture.FALLBACKS["check_in"]["gad7_7"], "questionnaire items keep their published words")
+flagged = seen["phq9_9"]
+check(flagged["crisis_event"] and flagged["crisis_event"]["tier"] == "danger" and flagged["crisis_event"]["show_resources"],
+      "a positive item 9 raises a safety flag and opens the resources screen at once")
+check(any(m["kind"] == "crisis" for m in flagged["messages"]), "and puts the fixed crisis content in the thread")
+check(flagged["next_capture"] and flagged["next_capture"]["value_id"] == "gad7_1",
+      "the questions wait behind it rather than vanish")
+rows = {r.version: r for r in S().query(QuestionnaireResponse).filter(QuestionnaireResponse.account_id == acct.id)}
+check(rows["phq9-v1"].score == 9 and rows["phq9-v1"].max_score == 27 and rows["gad7-v1"].score == 14,
+      "both questionnaires are scored and stored when the evening completes")
+check(AS.severity_band("phq9", rows["phq9-v1"].score) == "mild", "the stored score can be banded for a clinician")
+flag = S().query(CrisisEvent).filter(CrisisEvent.entry_id == uuid.UUID(e["id"]), CrisisEvent.field == "phq9_9").one()
+check(flag.acknowledged_at is None, "the safety flag starts unacknowledged")
+post(f"/entries/{e['id']}/crisis/acknowledge", {})
+check(S().get(CrisisEvent, flag.id).acknowledged_at is not None, "and is marked once she moves on from it")
+check(c.patch(f"/entries/{e['id']}/captures/phq9_9", json={"value": 0}).status_code == 409,
+      "a questionnaire answer cannot be changed afterwards")
+check("phq9_1" not in json.dumps(c.get("/insights").json()["questionnaire"]), "Insights shows no item, score or band")
+
+# Cross-links: the Thought Journal opened from this evening starts from its feelings.
+t = post("/entries", {"journal_type": "thought", "source_entry_id": e["id"]})
+state = t
+while state["next_capture"] and state["next_capture"]["value_id"] != "feelings":
+    state = post(f"/entries/{t['id']}/captures", {"value_id": state["next_capture"]["value_id"], "value": "",
+                                                    "skipped": not state["next_capture"]["required"]} if not state["next_capture"]["required"]
+                 else {"value_id": state["next_capture"]["value_id"], "value": "Something happened"})
+check(state["next_capture"]["preselected"] == ["tired", "worried"], "the thought journal's feelings arrive already ticked")
+check(c.post("/entries", json={"journal_type": "thought", "source_entry_id": t["id"]}).status_code == 409,
+      "only a check-in can be the source")
+
+with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 23, 20, 0)):
+    nxt = post("/entries", {"journal_type": "check_in", "slot": "evening", "tz_offset": 300})
+    _, asked, _ = run_slot(nxt, {"mood": 3})
+    check(not any(v.startswith(("phq9", "gad7")) for v in asked), "the next evening does not ask them again")
+    board = c.get("/entries/check_in/slots", params={"tz_offset": 300}).json()
+check(board["current"] == {"slot": "evening", "local_date": "2026-10-23"}, "the board knows the slot now")
+states = {(row["local_date"], row["slot"]): row["state"] for row in board["slots"]}
+check(states[("2026-10-22", "morning")] == "done" and states[("2026-10-22", "evening")] == "done"
+      and states[("2026-10-23", "morning")] == "missed" and states[("2026-10-23", "evening")] == "done",
+      f"yesterday and today, slot by slot: {states}")
 
 print(f"\nALL {ok} CHECKS PASSED")

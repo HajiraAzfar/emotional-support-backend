@@ -33,9 +33,12 @@ from datetime import datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy import func, or_, select
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from app.core import capture, context_builder, crisis, enforcement, language, llm_client, md_loader
+from app.core import (
+    assessments, capture, context_builder, crisis, enforcement, language, llm_client, md_loader, slots,
+)
 from app.core.config import settings
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
@@ -136,12 +139,22 @@ def _free_text_answers(values: list[dict], recorded: dict) -> list[str]:
     ]
 
 
+def _assessments_for(db: Session, entry: Entry) -> set[str]:
+    """The weekly questionnaires this entry asks: only an evening check-in, only when due."""
+    if entry.journal_type != "check_in" or entry.slot != slots.EVENING:
+        return set()
+    return assessments.due(db, entry.account_id, entry.started_at)
+
+
 def _values(db: Session, entry: Entry, account: Account) -> list[dict]:
-    """This user's schedule for this journal: the trauma variant differs (FR-JRN-005)."""
+    """
+    This user's schedule for this journal: the trauma variant differs (FR-JRN-005),
+    and a check-in asks its slot's questions.
+    """
     journal_type = _journal_type(entry)
     if not capture.has_schedule(journal_type):
         return []
-    return capture.values_for(journal_type, _focus_codes(db, account))
+    return capture.values_for(journal_type, _focus_codes(db, account), entry.slot, _assessments_for(db, entry))
 
 
 def _value_row(db: Session, entry: Entry, value_id: str) -> CapturedValue | None:
@@ -192,7 +205,21 @@ def _journal_type(entry: Entry) -> str:
     return context_builder.normalise_journal_type(entry.journal_type)
 
 
-def _state(db: Session, entry: Entry, account: Account, crisis_event: crisis.CrisisResult | None = None, referral: bool = False) -> EntryStepOut:
+def _preselected(db: Session, entry: Entry) -> list[str] | None:
+    """
+    A journal opened from a check-in starts its feelings from the check-in's:
+    already ticked, still hers to change.
+    """
+    if not entry.source_entry_id:
+        return None
+    source = db.query(Entry).filter(Entry.id == entry.source_entry_id, Entry.account_id == entry.account_id).first()
+    return (_recorded(db, source).get("feelings") or None) if source else None
+
+
+def _state(
+    db: Session, entry: Entry, account: Account, crisis_event: crisis.CrisisResult | None = None,
+    referral: bool = False, show_resources: bool = False,
+) -> EntryStepOut:
     next_capture = None
     # FR-JRN-007: no value is requested until the scope notice is acknowledged.
     notice = capture.notice_for(_journal_type(entry), _focus_codes(db, account))
@@ -208,6 +235,8 @@ def _state(db: Session, entry: Entry, account: Account, crisis_event: crisis.Cri
             # feelings list opens on the good feelings, and a rating only ever
             # lists the feelings she actually chose.
             next_capture = capture.spec_out(spec, recorded, values, _user_terms(db, account))
+            if spec["id"] == "feelings":
+                next_capture["preselected"] = _preselected(db, entry)
 
     support_note = None
     # AI Chat shows help through the card rules instead (crisis.card_for).
@@ -224,7 +253,7 @@ def _state(db: Session, entry: Entry, account: Account, crisis_event: crisis.Cri
         pending_resume=pending_resume,
         next_capture=next_capture,
         messages=_messages(db, entry),
-        crisis_event=crisis_event.as_dict() if crisis_event else None,
+        crisis_event={**crisis_event.as_dict(), "show_resources": show_resources} if crisis_event else None,
         referral=referral,
     )
 
@@ -310,7 +339,8 @@ def _ask_next(
     """
     journal_type = _journal_type(entry)
     focus_codes = _focus_codes(db, account)
-    values = capture.values_for(journal_type, focus_codes)
+    asked = _assessments_for(db, entry)
+    values = capture.values_for(journal_type, focus_codes, entry.slot, asked)
     recorded = _recorded(db, entry)
     # Values the conditions passed over are stored as not asked, never as skipped.
     for value_id in capture.not_asked(values, recorded):
@@ -323,6 +353,9 @@ def _ask_next(
         # FR-ENT-020: complete on the final capture, independent of the conversation.
         entry.status = "completed"
         entry.completed_at = datetime.utcnow()
+        # The week's questionnaires, scored and stored now that all of it is in.
+        if asked:
+            assessments.record_from(db, entry.account_id, recorded, asked)
         if crisis.suppressed(entry):
             entry.conversation_status = "suppressed"
             _add_message(db, entry, "ai", "notice", capture.FALLBACKS["saved"], card=card)
@@ -349,7 +382,8 @@ def _ask_next(
         return
 
     result = None
-    if not crisis.suppressed(entry):
+    # A published questionnaire item is shown as published, never reworded.
+    if not crisis.suppressed(entry) and not spec.get("fixed"):
         prompt = context_builder.build_capture_prompt(
             _focus_codes(db, account),
             journal_type,
@@ -539,8 +573,10 @@ def _apply_close(db: Session, entry: Entry, account: Account, outcome: enforceme
 
 
 def _schedule_values(entry: Entry) -> list[dict]:
-    """The base schedule, enough to know which values are free text."""
+    """The base schedule (a check-in's slot schedule), enough to know which values are free text."""
     journal_type = context_builder.normalise_journal_type(entry.journal_type)
+    if journal_type == "check_in" and entry.slot in capture.SLOT_SCHEDULES:
+        return capture.SLOT_SCHEDULES[entry.slot]
     return capture.SCHEDULES.get(journal_type, [])
 
 
@@ -584,6 +620,20 @@ def _summary(db: Session, entry: Entry) -> EntrySummary:
         conversation_status=entry.conversation_status,
         preview=(preview[:120] + "…") if preview and len(preview) > 120 else preview,
     )
+
+
+def _slot_entry(db: Session, account: Account, day, slot: str) -> Entry | None:
+    return db.query(Entry).filter(
+        Entry.account_id == account.id, Entry.journal_type == "check_in",
+        Entry.local_date == day, Entry.slot == slot,
+    ).first()
+
+
+def _existing_slot(db: Session, entry: Entry, account: Account) -> EntryStepOut:
+    """One check-in per slot per day: a started one is resumed, a finished one is done."""
+    if entry.status == "completed":
+        raise HTTPException(status_code=409, detail="This check-in is already done.")
+    return _state(db, entry, account)
 
 
 # ---------- endpoints ----------
@@ -649,16 +699,46 @@ def create_entry(
         if parent.journal_type != journal_type or parent.status != "completed":
             raise HTTPException(status_code=409, detail="Can only continue a completed cycle of the same journal")
 
+    source = None
+    if payload.source_entry_id:
+        # A journal opened from a check-in's review (cross-links).
+        source = _get_entry(db, payload.source_entry_id, account)
+        if source.journal_type != "check_in":
+            raise HTTPException(status_code=409, detail="A journal can only be opened from a check-in")
+
+    slot_fields = {}
+    if journal_type == "check_in" and payload.slot:
+        tz_offset = payload.tz_offset or 0
+        moment = slots.local_now(tz_offset)
+        day = payload.local_date or slots.slot_at(moment)[1]
+        if not slots.can_record(day, payload.slot, moment):
+            raise HTTPException(status_code=409, detail="That check-in isn't open right now.")
+        existing = _slot_entry(db, account, day, payload.slot)
+        if existing is not None:
+            return _existing_slot(db, existing, account)
+        slot_fields = {"slot": payload.slot, "local_date": day, "tz_offset": tz_offset,
+                       "timezone": payload.timezone}
+
     entry = Entry(
         account_id=account.id,
         journal_type=journal_type,
         status="in_progress",
         parent_entry_id=parent.id if parent else None,
+        source_entry_id=source.id if source else None,
         # The notice was already shown and acknowledged in the cycle this one continues.
         notice_acknowledged=bool(parent),
+        **slot_fields,
     )
     db.add(entry)
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError:
+        # The same slot, started twice at once: the other request made it first.
+        db.rollback()
+        existing = _slot_entry(db, account, slot_fields["local_date"], slot_fields["slot"])
+        if existing is None:
+            raise
+        return _existing_slot(db, existing, account)
 
     if parent:
         carried = _recorded(db, parent)
@@ -708,6 +788,41 @@ def check_in_factors(
         UserTerm.account_id == account.id, UserTerm.library == "triggers"
     ).order_by(UserTerm.created_at).all()
     return capture.checkin_factors(mood, [{"id": t.item_id, "name": t.name} for t in terms])
+
+
+@router.get("/check_in/slots")
+def check_in_slots(
+    tz_offset: int = Query(0, ge=-840, le=840),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_user),
+):
+    """
+    Yesterday's and today's three check-ins on her clock: done, started, open,
+    missed (it can still be added), upcoming, or closed. Missed is worked out
+    here, never stored, and the wording that shows it is the app's to keep kind.
+    """
+    moment = slots.local_now(tz_offset)
+    current, current_day = slots.slot_at(moment)
+    days = slots.days_shown(moment)
+    rows = db.query(Entry).filter(
+        Entry.account_id == account.id, Entry.journal_type == "check_in",
+        Entry.slot.isnot(None), Entry.local_date.in_(days),
+    ).all()
+    by_key = {(row.local_date, row.slot): row for row in rows}
+    out = []
+    for day in days:
+        for slot in slots.SLOTS:
+            opens, closes = slots.window(day, slot)
+            state = slots.state(day, slot, moment)
+            row = by_key.get((day, slot))
+            if row is not None:
+                state = "done" if row.status == "completed" else ("started" if state != slots.CLOSED else state)
+            out.append({
+                "local_date": day.isoformat(), "slot": slot, "state": state,
+                "entry_id": str(row.id) if row else None,
+                "opens_at": opens.isoformat(timespec="minutes"), "closes_at": closes.isoformat(timespec="minutes"),
+            })
+    return {"current": {"slot": current, "local_date": current_day.isoformat()}, "slots": out}
 
 
 def _check_in_recorded(mood: int, factor_names: list[str], note: str) -> str:
@@ -866,6 +981,22 @@ def acknowledge_notice(
     return _state(db, entry, account)
 
 
+@router.post("/{entry_id}/crisis/acknowledge", response_model=EntryStepOut)
+def acknowledge_crisis(
+    entry_id: uuid.UUID,
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_user),
+):
+    """She moved on from the crisis content deliberately: the safety flags are read, not left open."""
+    entry = _get_entry(db, entry_id, account)
+    db.query(CrisisEvent).filter(
+        CrisisEvent.entry_id == entry.id, CrisisEvent.acknowledged_at.is_(None)
+    ).update({CrisisEvent.acknowledged_at: datetime.utcnow()}, synchronize_session=False)
+    db.commit()
+    db.refresh(entry)
+    return _state(db, entry, account)
+
+
 @router.get("/{entry_id}", response_model=EntryStepOut)
 def get_entry(
     entry_id: uuid.UUID,
@@ -967,6 +1098,18 @@ def submit_capture(
     db.commit()
 
     event = card = None
+    show_resources = False
+    if spec["id"] == assessments.SAFETY_ITEM and isinstance(value, int) and value > 0:
+        # PHQ-9 item 9: thoughts of being better off dead or of self-harm. Any
+        # answer but "Not at all" is acted on now — fixed crisis content in the
+        # thread, the resources screen at once, a safety flag — and never
+        # carried silently on to the next question.
+        lang = language.reply_language(_free_text_answers(values, _recorded(db, entry)))
+        event = crisis.record(db, account.id, entry, spec["id"], "danger", lang)
+        if event and event.text:
+            _add_message(db, entry, "ai", "crisis", event.text)
+        show_resources = True
+        db.commit()
     if shown is not None and spec["control"] == "free_text":
         event, _, card = _screen_journal(db, account, entry, spec["id"], shown, history=[])
 
@@ -980,7 +1123,7 @@ def submit_capture(
     _ask_next(db, entry, account, previous_answer=previous, card=card)
     db.commit()
     db.refresh(entry)
-    return _state(db, entry, account, crisis_event=event)
+    return _state(db, entry, account, crisis_event=event, show_resources=show_resources)
 
 
 @router.post("/{entry_id}/perspective", response_model=EntryStepOut)
@@ -1056,6 +1199,10 @@ def revise_capture(
     row = _value_row(db, entry, value_id)
     if spec is None or row is None or row.status == "not_asked":
         raise HTTPException(status_code=404, detail="That is not an answer in this entry")
+    # A questionnaire is scored as it was answered, and a safety answer, once
+    # given, has already been acted on.
+    if spec.get("assessment"):
+        raise HTTPException(status_code=409, detail="Questionnaire answers are kept as they were given.")
 
     recorded = _recorded(db, entry)
     extra = _user_terms(db, account)
