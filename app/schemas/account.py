@@ -20,6 +20,7 @@ class AccountResponse(BaseModel):
     verified: bool
     weekly_goal: int
     interface_language: str
+    preferred_name: str | None = None
     created_at: datetime
 
     class Config:
@@ -75,4 +76,10 @@ class ResetTokenResponse(BaseModel):
 class ResetPasswordCodeRequest(BaseModel):
     reset_token: str
     password: str = Field(min_length=8)
+
+
+class DeleteAccountRequest(BaseModel):
+    # Deleting everything asks for the password again, so an unlocked phone in
+    # someone else's hands cannot do it.
+    password: str = Field(min_length=1, max_length=200)
     

@@ -1780,4 +1780,64 @@ quoted_bad = [line.strip()[:60] for line in described.splitlines()
               if line.strip().lower().startswith("bad:") and chr(34) in line]
 check(not quoted_bad, f"no example quotes a bad message word for word: {quoted_bad}")
 
+print("--- preferred name (greeting)")
+r = c.put("/onboarding/name", json={"name": "  Hajira \n  Azfar\x07 "}).json()
+check(r["preferred_name"] == "Hajira Azfar", "a name is trimmed, its spaces collapsed, control characters dropped")
+check(c.get("/onboarding/status").json()["preferred_name"] == "Hajira Azfar", "the onboarding status carries the name")
+check(c.get("/auth/me").json()["preferred_name"] == "Hajira Azfar", "so does /auth/me")
+check(c.put("/onboarding/name", json={"name": "x" * 41}).status_code == 422, "a name over 40 characters is refused")
+check(c.put("/onboarding/name", json={"name": "   "}).json()["preferred_name"] is None, "a blank name clears it")
+
+print("--- account deletion (SRS 4.12)")
+from app.core.account_deletion import ACCOUNT_TABLES
+from app.core.security import hash_password
+from app.models.library_favourite import LibraryFavourite
+keyed = {t.name for t in Base.metadata.tables.values() if "account_id" in t.c}
+check(keyed == {m.__tablename__ for m in ACCOUNT_TABLES} | {"entries"},
+      f"deletion covers every table with an account_id: {sorted(keyed)}")
+
+s = S()
+gone = Account(email="gone@x.com", password_hash=hash_password("correct horse"))
+s.add(gone); s.commit(); gone_id = gone.id
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, gone_id)
+gone_entry = uuid.UUID(post("/entries", {"journal_type": "check_in"})["id"])
+post("/library/understanding-thinking-traps/favourite", {})
+s = S()
+check(s.query(Message).filter(Message.entry_id == gone_entry).count() > 0
+      and s.query(LibraryFavourite).filter(LibraryFavourite.account_id == gone_id).count() == 1,
+      "the account to delete has an entry, its messages and a saved article")
+
+check(c.post("/auth/delete-account", json={"password": "wrong"}).status_code == 403, "a wrong password is refused")
+check(S().get(Account, gone_id) is not None, "and deletes nothing")
+check(c.post("/auth/delete-account", json={"password": "correct horse"}).status_code == 204,
+      "the right password deletes the account")
+s = S()
+check(s.get(Account, gone_id) is None, "the account is gone")
+check(s.query(Entry).filter(Entry.account_id == gone_id).count() == 0, "its entries are gone")
+check(s.query(Message).filter(Message.entry_id == gone_entry).count() == 0, "their messages are gone")
+check(s.query(LibraryFavourite).filter(LibraryFavourite.account_id == gone_id).count() == 0, "its saved articles are gone")
+check(s.get(Account, acct.id) is not None and s.query(Entry).filter(Entry.account_id == acct.id).count() > 0,
+      "nobody else's account or entries are touched")
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
+
+print("--- PDF report (Phase B)")
+r = c.get("/insights/report.pdf?period=all&tz_offset=300")
+check(r.status_code == 200 and r.headers["content-type"] == "application/pdf", "the report comes back as a PDF")
+check(r.content.startswith(b"%PDF") and len(r.content) > 2000, "and it is a real PDF document")
+check('filename="mind-doc-report-' in r.headers["content-disposition"] and r.headers["cache-control"] == "no-store",
+      "it downloads with a dated name and is never cached")
+check(c.get("/insights/report.pdf?period=forever").status_code == 422, "an unknown period is refused")
+
+from app.core import insights as insights_core, pdf_report
+from datetime import date as _date
+data = insights_core.build(S(), acct.id, "all", {}, tz_offset=300)
+check(pdf_report.render(data, name="A <b>tag</b> & name", made_on=_date(2026, 10, 22)).startswith(b"%PDF"),
+      "a name with markup characters is escaped, not interpreted")
+s = S()
+empty = Account(email="empty@x.com"); s.add(empty); s.commit(); empty_id = empty.id
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, empty_id)
+r = c.get("/insights/report.pdf?period=7d")
+check(r.status_code == 200 and r.content.startswith(b"%PDF"), "an account with no entries still gets a report, with its empty states")
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
+
 print(f"\nALL {ok} CHECKS PASSED")

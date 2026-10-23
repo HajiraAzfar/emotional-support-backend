@@ -1,6 +1,7 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, status
 from sqlalchemy.orm import Session
 
+from app.core.account_deletion import delete_account
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.core.devices import register_device
@@ -19,6 +20,7 @@ from app.core.verification import (
 from app.models.account import Account
 from app.schemas.account import (
     AccountResponse,
+    DeleteAccountRequest,
     ForgotPasswordRequest,
     LoginRequest,
     RefreshRequest,
@@ -162,6 +164,25 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=AccountResponse)
 def me(account: Account = Depends(get_current_user)):
     return account
+
+
+@router.post("/delete-account", status_code=status.HTTP_204_NO_CONTENT)
+def delete_my_account(
+    payload: DeleteAccountRequest,
+    account: Account = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """SRS 4.12: the account and every entry, chat and record, gone for good."""
+    if is_rate_limited(account.email):
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many attempts. Please wait 15 minutes and try again.",
+        )
+    if not account.password_hash or not verify_password(payload.password, account.password_hash):
+        record_failure(account.email)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="That password isn't right.")
+    clear_failures(account.email)
+    delete_account(db, account)
 
 
 @router.get("/verify-email")

@@ -16,6 +16,7 @@ from app.schemas.onboarding import (
     FocusAreasRequest,
     GoalRequest,
     LifeVisionRequest,
+    NameRequest,
     OnboardingStatusResponse,
     WorkIssuesRequest,
 )
@@ -55,6 +56,7 @@ def status_(
             account.distress_baseline is not None
             and account.distress_baseline >= settings.ELEVATED_DISTRESS_THRESHOLD
         ),
+        "preferred_name": account.preferred_name,
     }
 
 
@@ -168,3 +170,19 @@ def goal(
     db.commit()
     db.refresh(account)
     return status_(account=account, db=db)
+
+
+@router.put("/name", response_model=OnboardingStatusResponse)
+def name(
+    payload: NameRequest,
+    account: Account = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    # Whitespace runs collapse, and control characters never reach the greeting.
+    cleaned = " ".join("".join(ch for ch in (payload.name or "") if ch.isprintable()).split())
+    # The row from this request's session, whichever session supplied `account`.
+    row = db.get(Account, account.id)
+    row.preferred_name = cleaned or None
+    db.commit()
+    db.refresh(row)
+    return status_(account=row, db=db)

@@ -15,6 +15,9 @@ class Account(Base):
     password_hash = Column(String(255), nullable=True)
     verified = Column(Boolean, default=False, nullable=False)
     weekly_goal = Column(Integer, default=3, nullable=False)
+    # What the user would like to be called: the app's greeting and the PDF
+    # report's cover. Optional, and never sent to the model.
+    preferred_name = Column(String(40), nullable=True)
     interface_language = Column(String(10), default="en", nullable=False)
     work_issues = Column(ARRAY(String), nullable=True)
     life_vision = Column(String(160), nullable=True)

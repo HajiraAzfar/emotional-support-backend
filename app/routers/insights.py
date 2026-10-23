@@ -6,13 +6,13 @@ badges she has become eligible for, and it saves the line she chooses to carry
 into next week. Both are hers, both are deterministic, and neither is anything
 the model decided.
 """
-from datetime import date
+from datetime import date, datetime
 
-from fastapi import APIRouter, Depends, HTTPException, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core import badges, insights, narrative, questionnaire, weekly
+from app.core import badges, insights, narrative, pdf_report, questionnaire, weekly
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.account import Account
@@ -44,6 +44,31 @@ def get_insights(
     }
     # Days are hers, not the server's: an entry at 1am is that day's entry.
     return insights.build(db, account.id, period, terms, tz_offset=tz_offset, weekly_goal=account.weekly_goal)
+
+@router.get("/report.pdf")
+def get_report_pdf(
+    period: str = Query(insights.DEFAULT_PERIOD),
+    tz_offset: int = Query(0, ge=TZ_OFFSET_MIN, le=TZ_OFFSET_MAX),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_user),
+):
+    """Phase B: the same period's insights, as a PDF to keep or share."""
+    if period not in insights.PERIODS:
+        raise HTTPException(status_code=422, detail=f"Period must be one of: {', '.join(insights.PERIODS)}")
+    data = insights.build(db, account.id, period, _terms(db, account), tz_offset=tz_offset,
+                          weekly_goal=account.weekly_goal)
+    today = insights.local_date(datetime.utcnow(), tz_offset)
+    pdf = pdf_report.render(data, name=account.preferred_name, made_on=today)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="mind-doc-report-{today.isoformat()}.pdf"',
+            # The user's entries: never kept by a cache on the way.
+            "Cache-Control": "no-store",
+        },
+    )
+
 
 class QuestionnaireAnswers(BaseModel):
     # item id → value from the scale; validated against the instrument itself.
