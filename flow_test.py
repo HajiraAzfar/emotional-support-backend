@@ -2482,6 +2482,202 @@ check(any(e["module"] == "thought" and e["mood_signal"] == 1.5 for e in JE.event
 data = insights_core.build(S(), thinker_id, "all", {}, tz_offset=300)
 check(pdf_report.render(data, name=None, made_on=D(28)).startswith(b"%PDF") and data["rating_shifts"],
       "old and new records still go into Insights and its PDF")
+
+print("--- the Exposure Journal: ladders (core/exposure.py)")
+from app.core import exposure as EX, exposure_report as ER
+from app.core.account_deletion import delete_account
+from app.models.exposure_ladder import ExposureLadder, ExposureLadderItem
+s = S()
+facer = Account(email="facer@x.com", distress_baseline=9); outsider = Account(email="outsider@x.com")
+s.add_all([facer, outsider]); s.commit(); facer_id, outsider_id = facer.id, outsider.id
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, facer_id)
+
+made = post("/exposure/ladders", {"fear_name": "Speaking up at work", "tags": ["social", "performance"], "steps": [
+    {"description": "Present to the whole team", "expected_suds": 80},
+    {"description": "Ask one question in a meeting", "expected_suds": 40},
+    {"description": "Say good morning to the team", "expected_suds": 20}]})
+ladder = made["ladders"][0]; lid = ladder["id"]
+check([s_["expected_suds"] for s_ in ladder["steps"]] == [20, 40, 80] and ladder["steps"][1]["suggested_start"],
+      "steps are sorted from easy to hard, and a 30-50 step is suggested to start with")
+after_add = c.post(f"/exposure/ladders/{lid}/steps", json={"description": "Share an idea in a small meeting",
+                                                           "expected_suds": 55}).json()["ladders"][0]["steps"]
+check([s_["expected_suds"] for s_ in after_add] == [20, 40, 55, 80], "a new step goes where its expected anxiety puts it")
+mine = [s_["id"] for s_ in after_add]
+order = c.put(f"/exposure/ladders/{lid}/order", json={"item_ids": [mine[1], mine[0], mine[2], mine[3]]}).json()
+check([s_["id"] for s_ in order["ladders"][0]["steps"]] == [mine[1], mine[0], mine[2], mine[3]], "she can reorder them")
+check(c.put(f"/exposure/ladders/{lid}/order", json={"item_ids": mine[:2]}).status_code == 409,
+      "an order must list every step once")
+check(c.post("/exposure/ladders", json={"fear_name": "x", "tags": ["not_a_tag"]}).status_code == 422,
+      "only the fixed tags are accepted")
+step_q = mine[1]  # "Ask one question", 40
+step_easy, step_idea, step_big = mine[0], mine[2], mine[3]
+
+print("--- the Exposure Journal: plan, do, review — every state")
+
+
+def exposure(cid, at=datetime(2026, 10, 24, 10, 0), **body):
+    with patch("app.core.slots.local_now", return_value=at):
+        return c.put(f"/exposure/records/{cid}", json={"tz_offset": 300, **body})
+
+
+plan = dict(ladder_item_id=step_q, feared_outcome="Everyone will think it's a stupid question",
+            predicted_likelihood=80, predicted_severity=70, predicted_anxiety=70,
+            safety_behaviors_planned=["eye_contact", "leaving_early"], learning_goal="See what really happens")
+c1 = str(uuid.uuid4())
+draft = exposure(c1, feared_outcome="Everyone will think it's stupid").json()["record"]
+check(draft["status"] == "draft", "a step saves a draft")
+check(exposure(c1, status="planned", feared_outcome="x").status_code == 422, "a plan needs its ladder step")
+planned = exposure(c1, status="planned", scheduled_for="2026-10-25T09:30", **plan).json()["record"]
+w = S(); e1 = w.get(Entry, uuid.UUID(planned["id"]))
+check(planned["status"] == "planned" and e1.status == "in_progress"
+      and EX.consistent(e1, EX.records_of(w, [e1])[e1.id]), "planned is an entry still in progress")
+check([p["id"] for p in c.get("/exposure/home", params={"tz_offset": 300}).json()["planned"]] == [planned["id"]],
+      "and waits on the home, with its time")
+done = exposure(c1, at=datetime(2026, 10, 25, 10, 0), status="completed", **plan, anxiety_peak=50, anxiety_end=20,
+                anxiety_readings=[{"minute": 0, "suds": 50}, {"minute": 5, "suds": 30}], outcome_occurred="no",
+                what_happened="One person nodded", safety_behaviors_used=["eye_contact"], learning="They listened",
+                next_step="repeat").json()
+r1 = done["record"]
+w = S(); e1 = w.get(Entry, uuid.UUID(r1["id"]))
+check(r1["status"] == "completed" and e1.status == "completed" and e1.completed_at and r1["local_date"] == "2026-10-25"
+      and r1["what_happened"] == "One person nodded" and r1["peak"] == 50,
+      f"planned to completed: finished, on the day it was done: {r1['status']} {r1['local_date']}")
+check(exposure(c1, status="planned", **plan).status_code == 409, "a finished exposure never goes back to a plan")
+
+c2, c3 = str(uuid.uuid4()), str(uuid.uuid4())
+exposure(c2, at=datetime(2026, 10, 25, 11, 0), status="planned", **plan)
+partial = exposure(c2, at=datetime(2026, 10, 25, 12, 0), status="partial", **plan, anxiety_peak=60, anxiety_end=40,
+                   outcome_occurred="partly").json()
+w = S(); e2 = w.get(Entry, uuid.UUID(partial["record"]["id"]))
+check(e2.status == "completed" and partial["gentle"], "planned to partial counts as done, and the second of a day brings a kind word")
+exposure(c3, at=datetime(2026, 10, 25, 13, 0), status="planned", **plan)
+skipped = exposure(c3, at=datetime(2026, 10, 25, 14, 0), status="skipped", **plan).json()["record"]
+w = S(); e3 = w.get(Entry, uuid.UUID(skipped["id"]))
+check(e3.status == "closed" and skipped["status"] == "skipped" and EX.consistent(e3, EX.records_of(w, [e3])[e3.id]),
+      "planned to skipped closes it")
+with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 25, 20, 0)):
+    hm = {d["date"]: d for d in c.get("/exposure/heatmap", params={"tz_offset": 300}).json()["days"]}
+check(hm["2026-10-25"]["points"] == 2 and hm["2026-10-24"]["points"] == 0,
+      "the heatmap counts done and part-done exposures, never a skipped one or a draft day")
+check(planned["id"] not in {p["id"] for p in c.get("/exposure/home").json()["planned"]},
+      "once done it is no longer a plan (its reminder has nothing to wait for)")
+
+print("--- the Exposure Journal: archive, drafts, safety, sources")
+check(c.delete(f"/exposure/ladders/{lid}/steps/{step_q}").json()["outcome"] == "archived",
+      "a step an exposure used is archived, not deleted")
+kept = c.get(f"/exposure/entries/{r1['id']}").json()
+check(kept["step"]["description"] == "Ask one question in a meeting" and kept["step"]["archived"],
+      "and the record still shows its step")
+check(c.delete(f"/exposure/ladders/{lid}/steps/{step_big}").json()["outcome"] == "deleted"
+      and S().get(ExposureLadderItem, uuid.UUID(step_big)) is None, "a step nobody used is deleted")
+check(step_q not in {s_["id"] for s_ in c.get("/exposure/ladders").json()["ladders"][0]["steps"]},
+      "an archived step leaves the ladder she works from")
+
+w = S()
+old_plan = Entry(account_id=facer_id, journal_type="exposure", status="in_progress", client_id=uuid.uuid4(),
+                 started_at=datetime.utcnow() - timedelta(days=8))
+w.add(old_plan); w.commit(); old_plan_id = old_plan.id
+c.get("/exposure/home")
+check(S().get(Entry, old_plan_id) is None, "a draft or plan older than a week is gone")
+
+cf = str(uuid.uuid4())
+flag = exposure(cf, feared_outcome="I want to kill myself tonight").json()
+check(flag["crisis_event"] and flag["crisis_event"]["show_resources"] and flag["record"]["status"] == "draft",
+      "a crisis word in a step is flagged, the resources open, and the draft is kept")
+check(exposure(cf, feared_outcome="I want to kill myself tonight", predicted_likelihood=50).json()["crisis_event"] is None,
+      "the same words are not flagged twice")
+check(c.post("/exposure/ladders", json={"fear_name": "I want to end my life", "steps": []}).json()["crisis_event"],
+      "a ladder's own words are screened too")
+
+w = S()
+th_rec = Entry(account_id=facer_id, journal_type="thought", status="completed", completed_at=datetime.utcnow())
+w.add(th_rec); w.flush()
+w.add(CapturedValue(entry_id=th_rec.id, key="feelings", value=json.dumps(["nervous"]), skipped=False, status="answered"))
+w.commit(); th_id = str(th_rec.id)
+check(c.get("/exposure/prefill", params={"source_entry_id": th_id}).json()["feelings"] == ["nervous"],
+      "an exposure planned from a thought record starts with its feelings")
+check(exposure(str(uuid.uuid4()), source_entry_id=r1["id"]).status_code == 409, "only a check-in or thought record can be its source")
+home = c.get("/exposure/home").json()
+check(home["suggest_professional"], "a very high baseline suggests doing exposures with a professional")
+
+print("--- the Exposure Journal: report, patterns, old records, section C, export")
+# A record from before: 0-10 distress, no status, no step.
+w = S()
+legacy_x = Entry(account_id=facer_id, journal_type="exposure", status="completed",
+                 started_at=datetime(2026, 10, 20, 5), completed_at=datetime(2026, 10, 20, 6))
+w.add(legacy_x); w.flush()
+for key, value in (("feared_outcome", "The lift will get stuck"), ("distress_before", 7), ("planned_activity", "Take the lift"),
+                   ("post_account", "It was fine"), ("distress_during", 6), ("distress_after", 3), ("learning", "Lifts work")):
+    w.add(CapturedValue(entry_id=legacy_x.id, key=key, value=json.dumps(value), skipped=False, status="answered"))
+w.commit(); legacy_x_id = str(legacy_x.id)
+old = c.get(f"/exposure/entries/{legacy_x_id}").json()
+check(old["legacy"] and old["status"] == "completed" and old["peak"] == 60 and old["end"] == 30 and old["before"] == 70
+      and old["what_happened"] == "It was fine", f"a record from before reads on 0-100, ten times over: {old}")
+check(legacy_x_id in {r["id"] for r in c.get("/exposure/entries").json()["entries"]}, "and is in the history")
+
+# Three tries of the same step, the peak coming down.
+for n, peak in enumerate((70, 55, 40)):
+    exposure(str(uuid.uuid4()), at=datetime(2026, 10, 26 + n, 10), status="completed", ladder_item_id=step_easy,
+             feared_outcome="No one will answer", predicted_likelihood=60, predicted_anxiety=60, anxiety_peak=peak,
+             anxiety_end=20, outcome_occurred="no", safety_behaviors_planned=["eye_contact"])
+view = c.get("/reports/exposure", params={"from": "2026-10-01", "to": "2026-10-31"}).json()
+s_ = view["summary"]
+check(s_["done"] == 6 and s_["partial"] == 1 and s_["skipped"] == 1 and s_["steps_completed"] == 2,
+      f"done, part-done and set-aside are counted apart: {s_}")
+check(view["prediction"]["entries"] == 5 and view["prediction"]["outcome_rate"] == 10.0
+      and view["prediction"]["predicted_likelihood"] == 68.0,
+      f"predicted against what happened, only where both were given: {view['prediction']}")
+check(view["anxiety"] == {"predicted": 64.0, "peak": 55.8, "end": 25.0},
+      f"predicted, peak and end anxiety, older records ten times over: {view['anxiety']}")
+easy = next(r for r in view["repeats"] if r["step"] == "Say good morning to the team")
+check(easy["first_peak"] == 70 and easy["last_peak"] == 40, "repeats of one step show where the peak started and ended")
+check(any("happened less often than you predicted" in line for line in view["insights"])
+      and any("part of the practice" in line for line in view["insights"]),
+      f"patterns, with part-done and set-aside named neutrally: {view['insights']}")
+
+for n in range(4):
+    exposure(str(uuid.uuid4()), at=datetime(2026, 11, 1 + 5 * n, 10), status="completed", ladder_item_id=step_idea,
+             feared_outcome="They'll laugh", predicted_likelihood=80, predicted_anxiety=70, anxiety_peak=75,
+             anxiety_end=60, outcome_occurred="no")
+with patch("app.core.slots.local_now", return_value=datetime(2026, 11, 20, 10, 0)):
+    pattern = c.get("/exposure/home", params={"tz_offset": 300}).json()["pattern"]
+check(pattern == {"step": "Share an idea in a small meeting", "fear": "Speaking up at work", "attempts": 4},
+      f"a step tried for weeks without the prediction or the peak coming down is noticed: {pattern}")
+
+section = ER.exposure_section(S(), facer_id, ("2026-10-01", "2026-11-30"), {"include_excerpts": False})
+check(section["section"] == "C" and section["no_change_pattern"]["attempts"] == 4 and "excerpts" not in section
+      and "streak" not in json.dumps(section), f"section C: the metrics and the pattern, no words without consent")
+excerpts = ER.exposure_section(S(), facer_id, ("2026-10-01", "2026-11-30"), {"include_excerpts": True})["excerpts"]
+check(excerpts and "what_happened" in excerpts[0] and "post_account" not in excerpts[0],
+      "with consent, her words under the report's own names")
+check(ER.exposure_section(S(), outsider_id, (D(1), D(31)), None) == {"empty": True, "note": "No exposure entries in this period"}
+      and ER.exposure_section(S(), facer_id, 42, None)["empty"], "section C says when there is nothing, and never raises")
+check(any(e["module"] == "exposure" and e["mood_signal"] == 2.0 for e in JE.events(S(), facer_id, D(1), D(31))),
+      "done exposures are journal_events rows; the signal is how far the peak fell short of the prediction")
+plain = c.get("/exposure/export.json").json()
+notes = c.get("/exposure/export.json", params={"include_notes": True}).json()
+check(plain["ladders"][0]["steps"] and "what_happened" not in plain["exposures"][0]
+      and any(x.get("what_happened") == "It was fine" for x in notes["exposures"]),
+      "her export holds the ladders, their steps and every exposure, old ones too; her notes only when she asks")
+data = insights_core.build(S(), facer_id, "all", {}, tz_offset=300)
+cycles = {c_["cycle"]: c_ for g in data["exposure"] for c_ in g["cycles"]}
+check(pdf_report.render(data, name=None, made_on=D(28)).startswith(b"%PDF")
+      and any(g["feared_outcome"] == "The lift will get stuck" and g["cycles"][0]["during"] == 6 for g in data["exposure"])
+      and any(c_["during"] == 7 for g in data["exposure"] for c_ in g["cycles"] if g["feared_outcome"] == "No one will answer"),
+      "Insights keeps its 0-10 cycles: old ones as they were, new ones a tenth as much, and its PDF still draws")
+
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, outsider_id)
+check(c.get("/exposure/ladders").json()["ladders"] == []
+      and c.put(f"/exposure/ladders/{lid}", json={"fear_name": "mine"}).status_code == 404
+      and c.get(f"/exposure/entries/{r1['id']}").status_code == 404
+      and exposure(str(uuid.uuid4()), status="planned", ladder_item_id=step_easy, feared_outcome="x").status_code == 422
+      and exposure(c1, status="completed", **plan).status_code == 409,
+      "another account sees no ladder or record of hers, and can neither use her steps nor take over her records")
+post("/exposure/ladders", {"fear_name": "Crowds", "steps": [{"description": "A busy shop", "expected_suds": 50}]})
+w = S(); delete_account(w, w.get(Account, outsider_id))
+check(S().query(ExposureLadder).filter(ExposureLadder.account_id == outsider_id).count() == 0
+      and S().query(ExposureLadderItem).filter(ExposureLadderItem.description == "A busy shop").count() == 0,
+      "deleting an account takes its ladders and their steps with it")
 app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
 
 print(f"\nALL {ok} CHECKS PASSED")

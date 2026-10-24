@@ -424,6 +424,16 @@ def _streak(db: Session, account_id, tz_offset: int, now: datetime, weekly_goal:
     }
 
 
+def _tenths(recorded: dict, old: str, new: str) -> int | None:
+    """
+    This view stays on 0-10: a record from before gave that; one from the
+    Exposure Journal module gives 0-100 (SUDS), read here a tenth as much.
+    """
+    if recorded.get(old) is not None:
+        return recorded[old]
+    return round(recorded[new] / 10) if isinstance(recorded.get(new), int) else None
+
+
 def _exposure(entries: list[Entry], values: dict, tz_offset: int = 0) -> list[dict]:
     """
     FR-INS-013/014: for each feared outcome, the distress of every completed
@@ -441,9 +451,9 @@ def _exposure(entries: list[Entry], values: dict, tz_offset: int = 0) -> list[di
             "entry_id": str(entry.id),
             "feared_outcome": outcome,
             "completed_at": local_date(entry.completed_at, tz_offset).isoformat(),
-            "before": recorded.get("distress_before"),
-            "during": recorded.get("distress_during"),
-            "after": recorded.get("distress_after"),
+            "before": _tenths(recorded, "distress_before", "predicted_anxiety"),
+            "during": _tenths(recorded, "distress_during", "anxiety_peak"),
+            "after": _tenths(recorded, "distress_after", "anxiety_end"),
         })
 
     out = []

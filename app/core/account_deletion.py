@@ -14,6 +14,7 @@ from app.models.captured_value import CapturedValue
 from app.models.crisis_event import CrisisEvent
 from app.models.earned_badge import EarnedBadge
 from app.models.entry import Entry
+from app.models.exposure_ladder import ExposureLadder, ExposureLadderItem
 from app.models.focus_area import FocusArea
 from app.models.known_device import KnownDevice
 from app.models.library_favourite import LibraryFavourite
@@ -28,6 +29,7 @@ from app.models.weekly_reflection import WeeklyReflection
 ACCOUNT_TABLES = (
     CrisisEvent,
     EarnedBadge,
+    ExposureLadder,
     FocusArea,
     KnownDevice,
     LibraryFavourite,
@@ -45,6 +47,11 @@ def delete_account(db: Session, account: Account) -> None:
     try:
         db.query(Message).filter(Message.entry_id.in_(entry_ids)).delete(synchronize_session=False)
         db.query(CapturedValue).filter(CapturedValue.entry_id.in_(entry_ids)).delete(
+            synchronize_session=False
+        )
+        # A ladder's steps are owned through the ladder: they go first.
+        ladder_ids = select(ExposureLadder.id).where(ExposureLadder.account_id == account.id)
+        db.query(ExposureLadderItem).filter(ExposureLadderItem.ladder_id.in_(ladder_ids)).delete(
             synchronize_session=False
         )
         for model in ACCOUNT_TABLES:

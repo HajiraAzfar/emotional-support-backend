@@ -29,7 +29,6 @@ AI assist only when she asks: one Socratic question at the evidence, and up to
 two thinking patterns for her to confirm. Never advice, a diagnosis, a label
 or the balanced thought; rate-limited; the app has fixed questions otherwise.
 """
-import json
 import uuid
 from collections import Counter
 from datetime import date, datetime, timedelta
@@ -37,8 +36,7 @@ from pathlib import Path
 
 from sqlalchemy.orm import Session
 
-from app.core import capture, crisis, insights, llm_client, slots, streaks
-from app.models.captured_value import CapturedValue
+from app.core import capture, crisis, insights, journal_records as records, llm_client, slots, streaks
 from app.models.entry import Entry
 
 JOURNAL = "thought"
@@ -85,10 +83,7 @@ _PROMPTS = {
 _assist_calls: dict[str, list[datetime]] = {}
 
 
-class Refused(Exception):
-    def __init__(self, code: str, message: str):
-        super().__init__(message)
-        self.code, self.message = code, message
+Refused = records.Refused
 
 
 # ---------- reading and checking ----------
@@ -149,41 +144,23 @@ def recorded_values(db: Session, entries: list[Entry]) -> dict:
 
 
 def _store(db: Session, entry: Entry, values: dict):
-    db.query(CapturedValue).filter(
-        CapturedValue.entry_id == entry.id, CapturedValue.key.in_(CONTENT_VALUES + (V_MODE,))
-    ).delete(synchronize_session=False)
-    for key, value in values.items():
-        db.add(CapturedValue(entry_id=entry.id, key=key, value=json.dumps(value, ensure_ascii=False),
-                             skipped=False, status="answered"))
+    records.store(db, entry, values, CONTENT_VALUES + (V_MODE,))
 
 
 def _screen(db: Session, account, entry: Entry, old: dict, new: dict):
-    """Only words that changed in this save are read: each step, and the final save, are screened once."""
-    from app.routers.entries import _screen_journal  # the shared journal screening
-
-    changed = [k for k in FREE_TEXT if new.get(k) and new.get(k) != old.get(k)]
-    if not changed:
-        return None
-    result, _, _ = _screen_journal(db, account, entry, changed[0], "\n".join(new[k] for k in changed), history=[])
-    return result
+    return records.screen_changes(db, account, entry, old, new, FREE_TEXT)
 
 
 # ---------- drafts, finishing, editing ----------
 
 def _entry_for(db: Session, account, client_id: uuid.UUID) -> Entry | None:
-    entry = db.query(Entry).filter(Entry.client_id == client_id).first()
-    if entry is not None and (entry.account_id != account.id or entry.journal_type != JOURNAL):
-        raise Refused("conflict", "That record could not be saved.")
-    return entry
+    return records.entry_for(db, account, client_id, JOURNAL)
 
 
 def checkin_feelings(db: Session, account_id, source_id) -> list[str]:
     """A check-in's feelings, to start a record opened from it."""
-    source = db.query(Entry).filter(Entry.id == source_id, Entry.account_id == account_id).first()
-    if source is None or source.journal_type != "check_in":
-        raise Refused("bad_source", "A thought record can only be opened from a check-in.")
-    row = db.query(CapturedValue).filter(CapturedValue.entry_id == source.id, CapturedValue.key == "feelings").first()
-    return json.loads(row.value) if row and row.value else []
+    return records.source_feelings(db, account_id, source_id, ("check_in",),
+                                   "A thought record can only be opened from a check-in.")
 
 
 def save(db: Session, account, client_id: uuid.UUID, payload, terms: dict[str, str], focus_codes: list[str],
@@ -237,25 +214,11 @@ def _apply(db: Session, account, entry: Entry, content, complete: bool, mode: st
     return entry, result
 
 
-def client_id_of(db: Session, entry: Entry) -> uuid.UUID:
-    """A record from before the module has no client id yet: it gets one, so it can be carried on."""
-    if entry.client_id is None:
-        entry.client_id = uuid.uuid4()
-        db.commit()
-    return entry.client_id
+client_id_of = records.client_id_of
 
 
 def expire_drafts(db: Session, account_id, now_utc: datetime | None = None) -> int:
-    """Drafts are kept DRAFT_DAYS; older ones go (a safety flag raised in one stays, unlinked)."""
-    from app.routers.entries import remove_entry
-
-    cutoff = (now_utc or datetime.utcnow()) - timedelta(days=DRAFT_DAYS)
-    old = db.query(Entry).filter(Entry.account_id == account_id, Entry.journal_type == JOURNAL,
-                                 Entry.status == "in_progress", Entry.started_at < cutoff).all()
-    for entry in old:
-        remove_entry(db, entry)
-    db.commit()
-    return len(old)
+    return records.expire_drafts(db, account_id, JOURNAL, DRAFT_DAYS, now_utc)
 
 
 # ---------- what the app reads ----------
@@ -267,11 +230,7 @@ def entries_of(db: Session, account_id, status: str | None = "completed") -> lis
     return query.order_by(Entry.started_at).all()
 
 
-def day_of(entry: Entry, tz_offset: int) -> date:
-    if entry.local_date is not None:
-        return entry.local_date
-    offset = entry.tz_offset if entry.tz_offset is not None else tz_offset
-    return insights.local_date(entry.completed_at or entry.started_at, offset)
+day_of = records.day_of
 
 
 def _drop(before, after) -> int | None:

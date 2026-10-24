@@ -64,22 +64,28 @@ def _non_empty(values: dict, entry: Entry, key: str) -> str:
     return recorded.strip() if isinstance(recorded, str) and recorded.strip() else ""
 
 
+def _attempted(values: dict, entry: Entry) -> bool:
+    """
+    FR-JRN-006: a step she planned is not a step she tried. A record from the
+    Exposure Journal module says so itself (done, or done in part); one from
+    before is tried when it has an account of how it went, or a distress rating
+    from during or after.
+    """
+    recorded = values.get(entry.id, {})
+    if recorded.get("exposure_status"):
+        return recorded["exposure_status"] in ("completed", "partial")
+    return bool(_non_empty(values, entry, "post_account")
+                or recorded.get("distress_during") is not None or recorded.get("distress_after") is not None)
+
+
 def _overview(entries: list[Entry], values: dict) -> dict:
     counts = {journal: 0 for journal in badges.JOURNALS}
     for entry in entries:
         if entry.journal_type in counts:
             counts[entry.journal_type] += 1
 
-    # FR-JRN-006: a step she planned is not a step she tried. Trying it is
-    # recorded afterwards — an account of how it went, or a distress rating
-    # from during or after.
     exposures = [e for e in entries if e.journal_type == "exposure"]
-    attempted = [
-        e for e in exposures
-        if _non_empty(values, e, "post_account")
-        or values.get(e.id, {}).get("distress_during") is not None
-        or values.get(e.id, {}).get("distress_after") is not None
-    ]
+    attempted = [e for e in exposures if _attempted(values, e)]
     learnings = [
         e for e in entries
         if any(_non_empty(values, e, key) for key in badges.LEARNING_VALUES)
@@ -175,12 +181,7 @@ def _journal_detail(entries: list[Entry], values: dict, user_terms: dict, tz_off
         "exposure": {
             # Planned, tried and what she learned are three different things.
             "planned": len(exposure),
-            "attempted": sum(
-                1 for e in exposure
-                if _non_empty(values, e, "post_account")
-                or values.get(e.id, {}).get("distress_during") is not None
-                or values.get(e.id, {}).get("distress_after") is not None
-            ),
+            "attempted": sum(1 for e in exposure if _attempted(values, e)),
             "cycles": insights._exposure(entries, values, tz_offset),
         },
     }

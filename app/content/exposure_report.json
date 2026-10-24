@@ -1,0 +1,17 @@
+{
+  "_clinical_status": "DRAFT_NOT_CLINICALLY_APPROVED",
+  "_comment": "The Exposure Journal's report insights (core/exposure_report.py). Patterns in what she recorded, shown from MIN_DONE finished exposures with the values behind them. Partly done and skipped attempts are named neutrally. Never a cause, a diagnosis or advice. {placeholders} are filled in by the code.",
+  "locked": "A few more exposures will show your patterns: {n} more done fully or in part.",
+  "insights": {
+    "outcome_less": "The feared outcome happened less often than you predicted: you expected about {predicted}%, and it happened in about {actual}% of exposures.",
+    "outcome_same": "The feared outcome happened about as often as you predicted (about {actual}%).",
+    "outcome_more": "The feared outcome happened more often than you predicted (about {actual}%, against {predicted}% expected). Noticing that is useful too.",
+    "peak_lower": "Your anxiety tended to peak lower than you predicted ({peak} against {predicted}), and to be at {end} by the end.",
+    "peak_higher": "Your anxiety tended to peak higher than you predicted ({peak} against {predicted}), and to be at {end} by the end. You stayed with it anyway.",
+    "repeats": "On steps you came back to, the peak tended to come down, from about {first} to {last}.",
+    "safety": "\"{behaviour}\" was the safety behaviour you most often planned to drop.",
+    "partial": "{partial} were done in part and {skipped} were set aside; each is part of the practice."
+  },
+  "pattern": "\"{step}\" has been tried {n} times over a few weeks without the prediction or the peak coming down.",
+  "empty_section": "No exposure entries in this period"
+}
