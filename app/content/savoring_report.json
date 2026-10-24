@@ -1,0 +1,20 @@
+{
+  "_clinical_status": "DRAFT_NOT_CLINICALLY_APPROVED",
+  "_comment": "The Saving Journal's report insights (core/savoring_report.py). Each is a pattern in what she recorded, shown only once there are enough moments (MIN_FOR_INSIGHTS) and its own minimum behind it. Never a cause, never a should. {placeholders} are filled in by the code.",
+  "locked": "Keep savoring to unlock insights: {n} more moment{s} will show your patterns.",
+  "insights": {
+    "lift_up": "Your mood tended to be higher after savoring (about +{lift} on average).",
+    "lift_same": "Your mood before and after tended to be about the same. Noticing a good moment still counts.",
+    "technique": "\"{technique}\" tended to go with a bigger lift ({lift} on average, against {overall} overall).",
+    "category": "Moments about \"{category}\" tended to lift your mood the most.",
+    "anticipation_better": "Things you looked forward to tended to turn out better than you expected ({actual} against {expected}).",
+    "anticipation_same": "Things you looked forward to tended to turn out about as good as you expected.",
+    "anticipation_less": "Things you looked forward to tended to turn out a little less good than you expected ({actual} against {expected}); looking forward to them still counts.",
+    "weeks_higher": "Weeks with more savoring days tended to have a higher check-in mood ({more} against {fewer} out of 5). This is a pattern, not a cause.",
+    "weeks_lower": "Weeks with more savoring days tended to have a lower check-in mood ({more} against {fewer} out of 5). This is a pattern, not a cause.",
+    "time_of_day": "You savored most often in the {part}.",
+    "emotion": "\"{emotion}\" was the feeling you named most."
+  },
+  "other_words": "Other (your words)",
+  "empty_section": "No savoring entries in this period"
+}

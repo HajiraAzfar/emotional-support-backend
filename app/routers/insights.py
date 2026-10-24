@@ -12,7 +12,7 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core import badges, insights, narrative, pdf_report, questionnaire, weekly
+from app.core import badges, checkin_pdf, checkin_reports, insights, narrative, pdf_report, questionnaire, weekly
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.account import Account
@@ -65,6 +65,48 @@ def get_report_pdf(
         headers={
             "Content-Disposition": f'attachment; filename="mind-doc-report-{today.isoformat()}.pdf"',
             # The user's entries: never kept by a cache on the way.
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@router.get("/check-ins/reports")
+def get_checkin_reports(
+    tz_offset: int = Query(0, ge=TZ_OFFSET_MIN, le=TZ_OFFSET_MAX),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_user),
+):
+    """The check-in reports she can open: finished days, weeks and months, newest first."""
+    return checkin_reports.listing(db, account.id, tz_offset)
+
+
+@router.get("/check-ins/report.pdf")
+def get_checkin_report_pdf(
+    kind: str = Query(...),
+    start: date = Query(...),
+    tz_offset: int = Query(0, ge=TZ_OFFSET_MIN, le=TZ_OFFSET_MAX),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_user),
+):
+    """One day's, week's or month's check-ins as a PDF, once that period is over on her clock."""
+    if kind not in checkin_reports.KINDS:
+        raise HTTPException(status_code=422, detail=f"Kind must be one of: {', '.join(checkin_reports.KINDS)}")
+    try:
+        report = checkin_reports.build(db, account.id, kind, start, _terms(db, account), tz_offset)
+    except ValueError as exc:
+        raise HTTPException(status_code=422, detail=str(exc))
+    except checkin_reports.NotReady:
+        raise HTTPException(status_code=409,
+                            detail=f"This report is ready once the {checkin_reports.NOUNS[kind]} is over.")
+    except checkin_reports.Empty:
+        raise HTTPException(status_code=404, detail="No check-ins were finished in this period.")
+    today = insights.local_date(datetime.utcnow(), tz_offset)
+    pdf = checkin_pdf.render(report, name=account.preferred_name, made_on=today)
+    return Response(
+        content=pdf,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": f'attachment; filename="mind-doc-{kind}-{report["start"]}.pdf"',
             "Cache-Control": "no-store",
         },
     )

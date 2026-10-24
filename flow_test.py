@@ -1839,7 +1839,7 @@ r = c.get("/insights/report.pdf?period=7d")
 check(r.status_code == 200 and r.content.startswith(b"%PDF"), "an account with no entries still gets a report, with its empty states")
 app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
 
-print("--- check-in slots: windows and backfill (core/slots.py)")
+print("--- check-in slots: windows, no backfill (core/slots.py)")
 from datetime import date as _D
 from sqlalchemy.exc import IntegrityError as _IntegrityError
 from app.core import slots as SL, assessments as AS
@@ -1852,9 +1852,12 @@ check(SL.slot_at(datetime(2026, 10, 23, 5, 0)) == ("morning", _D(2026, 10, 23)),
 check(SL.state(d22, "afternoon", datetime(2026, 10, 22, 11, 59)) == "upcoming", "before its window a slot is upcoming")
 check(SL.state(d22, "afternoon", datetime(2026, 10, 22, 17, 59)) == "open", "late in its window it can still be done")
 check(SL.state(d22, "evening", datetime(2026, 10, 23, 4, 59)) == "open", "the evening stays open until 04:59")
-check(SL.state(d22, "morning", datetime(2026, 10, 22, 12, 0)) == "missed", "a passed slot today can still be added")
-check(SL.state(d22, "evening", datetime(2026, 10, 23, 20, 0)) == "missed", "yesterday's can be backfilled")
-check(SL.state(d22, "morning", datetime(2026, 10, 24, 9, 0)) == "closed", "the day before yesterday cannot")
+check(SL.state(d22, "morning", datetime(2026, 10, 22, 12, 0)) == "closed"
+      and not SL.can_record(d22, "morning", datetime(2026, 10, 22, 12, 0)),
+      "once its window has passed, a slot is closed: nothing can be added late")
+check(not SL.can_record(d22, "evening", datetime(2026, 10, 23, 20, 0)), "nor can yesterday's be backfilled")
+check(not SL.day_over(d22, datetime(2026, 10, 23, 4, 59)) and SL.day_over(d22, datetime(2026, 10, 23, 5, 0)),
+      "a day is over at 05:00 the next morning, when its evening closes")
 
 print("--- PHQ-9 / GAD-7 severity bands (clinician report only)")
 check([AS.severity_band("phq9", t) for t in (0, 4, 5, 9, 10, 14, 15, 19, 20, 27)] ==
@@ -1892,7 +1895,7 @@ with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 22, 8, 30
     check(c.post("/entries", json={"journal_type": "check_in", "slot": "evening", "tz_offset": 300}).status_code == 409,
           "an evening that has not opened yet cannot be started")
     check(c.post("/entries", json={"journal_type": "check_in", "slot": "evening", "tz_offset": 300,
-                                   "local_date": "2026-10-20"}).status_code == 409, "two days back is too far to backfill")
+                                   "local_date": "2026-10-21"}).status_code == 409, "yesterday's evening cannot be added today")
     morning = {"mood": 2, "anxiety": 6, "energy": 2, "feelings": ["tired"], "feeling_ratings": {"tired": 7},
                "sleep_hours": 5, "sleep_quality": 2, "intention": "Rest a little", "dread_triggers": ["workload"],
                "dread_note": ""}
@@ -1920,6 +1923,20 @@ with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 22, 13, 0
     check(S().query(CapturedValue).filter(CapturedValue.entry_id == uuid.UUID(a["id"]),
                                          CapturedValue.key == "stress_triggers").first().status == "not_asked",
           "and they are stored as not asked, never as skipped")
+    check(c.patch(f"/entries/{a['id']}/captures/pleasure", json={"value": 9}).status_code == 409,
+          "a finished check-in is kept as it was, even while its window is open")
+
+# A morning started but left unfinished: once the window closes it cannot be carried on.
+with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 14, 11, 50)):
+    left = post("/entries", {"journal_type": "check_in", "slot": "morning", "tz_offset": 300})
+    post(f"/entries/{left['id']}/captures", {"value_id": "mood", "value": 3})
+with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 14, 12, 5)):
+    check(c.post(f"/entries/{left['id']}/captures", json={"value_id": "anxiety", "value": 2}).status_code == 409,
+          "an answer after the window has closed is refused")
+    check(c.patch(f"/entries/{left['id']}/captures/mood", json={"value": 4}).status_code == 409,
+          "and so is a change to one given before")
+    check(left["id"] not in {e["id"] for e in c.get("/entries", params={"status": "in_progress"}).json()},
+          "it is no longer offered to resume")
 
 print("--- the evening: cross-links, weekly PHQ-9 / GAD-7, and the safety question")
 phq = [f"phq9_{i}" for i in range(1, 10)]
@@ -1971,7 +1988,312 @@ with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 23, 20, 0
 check(board["current"] == {"slot": "evening", "local_date": "2026-10-23"}, "the board knows the slot now")
 states = {(row["local_date"], row["slot"]): row["state"] for row in board["slots"]}
 check(states[("2026-10-22", "morning")] == "done" and states[("2026-10-22", "evening")] == "done"
-      and states[("2026-10-23", "morning")] == "missed" and states[("2026-10-23", "evening")] == "done",
+      and states[("2026-10-23", "morning")] == "closed" and states[("2026-10-23", "evening")] == "done",
       f"yesterday and today, slot by slot: {states}")
+
+print("--- check-in reports: a day, a week, a month (core/checkin_reports.py, checkin_pdf.py)")
+from app.core import checkin_reports as CR, checkin_pdf as CP
+mon = d22 - timedelta(days=d22.weekday())
+
+
+def slot_on(day, slot, hour, answers):
+    with patch("app.core.slots.local_now", return_value=datetime(day.year, day.month, day.day, hour)):
+        return run_slot(post("/entries", {"journal_type": "check_in", "slot": slot, "tz_offset": 300}), answers)[0]
+
+
+# The rest of that week: calm mornings, tense evenings; short nights on the low days.
+for day, good in ((mon, False), (mon + timedelta(days=1), True), (mon + timedelta(days=2), True),
+                  (mon + timedelta(days=5), True), (mon + timedelta(days=6), False)):
+    mood = 4 if good else 2
+    slot_on(day, "morning", 8, {"mood": mood, "anxiety": 2, "feelings": ["tired"], "sleep_hours": 8 if good else 4})
+    slot_on(day, "afternoon", 14, {"mood": mood, "anxiety": 4, "activities": ["work_study"],
+                                   "pleasure": 7 if good else 3, "achievement": 6, "stress_event": 0 if good else 1,
+                                   "stress_triggers": ["workload"], "coping": ["walk"]})
+    slot_on(day, "evening", 20, {"mood": mood, "anxiety": 7, "day_rating": 8 if good else 3,
+                                 "day_activities": ["exercise", "social"] if good else ["work_study"],
+                                 "plan_completed": 2 if good else 0, "win": "Went for a walk",
+                                 "what_helped": "Talking to my sister"})
+
+# The evening's questionnaires were stored at the real time of this run; pin them to that evening.
+w = S()
+w.query(QuestionnaireResponse).filter(QuestionnaireResponse.account_id == acct.id).update(
+    {"created_at": datetime(2026, 10, 22, 15, 0)})
+w.commit()
+after_week = datetime(2026, 10, 26, 5, 0) - timedelta(minutes=300)  # Monday 05:00 in Karachi, in UTC
+week = CR.build(S(), acct.id, "weekly", mon, {}, 300, now_utc=after_week)
+said = " ".join(week["conclusions"])
+check(week["glance"]["check_ins"] == 19 and week["glance"]["possible"] == 21 and week["glance"]["days_with"] == 7,
+      f"the week counts its finished check-ins only: {week['glance']}")
+check("Mornings were your calmest time" in said, f"mornings calmer than evenings is said with its numbers: {said}")
+check("after 6 hours or more" in said, "short nights against longer ones, with three days on each side")
+check('On your better days, "Exercise" came up most (3 of 3 days)' in said, "what the better days held")
+check('"Workload" came up most' in said and 'You chose "A walk" most often' in said, "stress and coping, counted")
+check(not any(word in said.lower() for word in ("depress", "anxiety disorder", "diagnos", "phq", "gad")),
+      "no conclusion names a condition or a questionnaire")
+check(len(week["questions"]["phq9"]) == 1 and "score" not in json.dumps(week["questions"]),
+      "the weekly questions come as positions only")
+
+day = CR.build(S(), acct.id, "daily", d22, {}, 300, now_utc=after_week)
+check(day["conclusions"][0] == "You did 3 of 3 check-ins that day (morning, afternoon and evening).",
+      f"a day starts with what was done: {day['conclusions']}")
+check(any("You slept about 5 hours" in line for line in day["conclusions"]), "and describes it, slot by slot")
+check(not any("averaged" in line for line in day["conclusions"]), "one day draws no pattern")
+
+try:
+    CR.build(S(), acct.id, "daily", d22, {}, 300, now_utc=datetime(2026, 10, 23, 4, 59) - timedelta(minutes=300))
+    early = False
+except CR.NotReady:
+    early = True
+check(early, "a day's report waits until 05:00 the next morning")
+for kind, start in (("weekly", d22), ("monthly", mon)):
+    try:
+        CR.build(S(), acct.id, kind, start, {}, 300, now_utc=after_week)
+        bad = False
+    except ValueError:
+        bad = True
+    check(bad, f"a {kind} report only starts on its first day")
+
+month = CR.build(S(), acct.id, "monthly", d22.replace(day=1), {}, 300,
+                 now_utc=datetime(2026, 11, 1, 5, 0) - timedelta(minutes=300))
+check(month["glance"]["days"] == 31 and len(month["weeks"]) == 5 and month["check_ins"] == 19,
+      "the month is every day of it, grouped by week")
+for report in (day, week, month):
+    check(CP.render(report, name="A <b>tag</b> & name", made_on=d22).startswith(b"%PDF"),
+          f"the {report['kind']} report draws as a PDF, with her name escaped")
+
+with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 24, 9, 0)):
+    listed = c.get("/insights/check-ins/reports", params={"tz_offset": 300}).json()
+    check(listed["latest_daily"]["start"] == "2026-10-23" and listed["latest_daily"]["check_ins"] == 1,
+          "until today is over, yesterday's report leads")
+    check([r["start"] for r in listed["daily"]][:2] == ["2026-10-23", "2026-10-22"] and listed["weekly"] == []
+          and listed["monthly"] == [], "only finished periods are listed: this week and month are not over yet")
+    check(c.get("/insights/check-ins/report.pdf", params={"kind": "daily", "start": "2026-10-24", "tz_offset": 300}
+                ).status_code == 409, "today's report is not ready")
+    check(c.get("/insights/check-ins/report.pdf", params={"kind": "daily", "start": "2026-10-01", "tz_offset": 300}
+                ).status_code == 404, "a day with no check-in has no report")
+    r = c.get("/insights/check-ins/report.pdf", params={"kind": "daily", "start": "2026-10-22", "tz_offset": 300})
+    check(r.status_code == 200 and r.content.startswith(b"%PDF") and r.headers["cache-control"] == "no-store",
+          "a finished day downloads as a PDF that nothing caches")
+with patch("app.core.slots.local_now", return_value=datetime(2026, 11, 2, 9, 0)):
+    listed = c.get("/insights/check-ins/reports", params={"tz_offset": 300}).json()
+    check([r["start"] for r in listed["weekly"]] == ["2026-10-19"] and [r["start"] for r in listed["monthly"]]
+          == ["2026-10-01"], "once over, the week and the month are listed too")
+
+print("--- the Saving Journal: moments, three a day, today or yesterday (core/savoring.py)")
+from app.core import savoring as SV, savoring_report as SR, journal_events as JE
+from app.schemas.savoring import SavoringCreate
+s = S()
+saver = Account(email="savor@x.com"); other = Account(email="other-savor@x.com")
+s.add_all([saver, other]); s.commit(); saver_id, other_id = saver.id, other.id
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, saver_id)
+oct24 = datetime(2026, 10, 24, 10, 0)
+
+
+def moment(at=oct24, **body):
+    with patch("app.core.slots.local_now", return_value=at):
+        return c.post("/savoring/entries", json={"what_happened": "Chai with Ammi on the roof", "tz_offset": 300,
+                                                 **body})
+
+
+r = moment(mood_before=4, emotions={"grateful": 7, "calm_feeling": None}, categories=["time_with_someone"])
+first = r.json()
+check(r.status_code == 201 and first["entry"]["type"] == "moment" and first["entry"]["mode"] == "quick"
+      and first["entry"]["local_date"] == "2026-10-24", f"a quick moment is saved for her day: {first['entry']}")
+check([e["name"] for e in first["entry"]["emotions"]] == ["Grateful", "Calm"]
+      and first["entry"]["emotions"][0]["intensity"] == 7 and first["entry"]["emotions"][1]["intensity"] is None,
+      "feelings keep her order, with a strength only where she gave one")
+check(first["entry"]["mood_lift"] is None and first["day"] == {"date": "2026-10-24", "count": 1, "cap": 3,
+                                                               "at_cap": False, "message": None},
+      "no mood after means no lift; the day has room left")
+moment(mode="full", mood_before=3, mood_after=6, techniques=["senses", "shared"], sensory_note="Warm cup",
+       souvenir_line="The steam and her laugh")
+third = moment(client_id=str(uuid.uuid4())).json()
+check(third["day"]["at_cap"] and third["day"]["message"] == SV.cap_message(oct24.date(), oct24.date()),
+      "the third moment fills the day")
+r = moment()
+check(r.status_code == 409 and r.json()["detail"]["code"] == "daily_cap"
+      and r.json()["detail"]["message"] == "You've captured 3 good moments today. Come back tomorrow for more.",
+      "a fourth is refused in friendly words")
+check(moment(client_id=str(uuid.uuid4())).status_code == 409, "a new client id does not get round it")
+cid = str(uuid.uuid4())
+yday = moment(local_date="2026-10-23", client_id=cid).json()
+check(yday["entry"]["local_date"] == "2026-10-23" and yday["day"]["count"] == 1, "yesterday can still take a moment")
+check(moment(local_date="2026-10-23", client_id=cid).json()["entry"]["id"] == yday["entry"]["id"]
+      and SV.count_on(S(), saver_id, datetime(2026, 10, 23).date()) == 1,
+      "the same moment sent twice (a retry, an offline sync) is saved once")
+for bad, label in (("2026-10-22", "two days back"), ("2026-10-25", "tomorrow")):
+    r = moment(local_date=bad)
+    check(r.status_code == 409 and r.json()["detail"]["code"] == "outside_window", f"{label} is outside the window")
+
+# Day boundaries are hers: 23:30 and 00:30 in Karachi are different days.
+w = S()
+full_day = SavoringCreate(what_happened="Late tea", tz_offset=300)
+try:
+    SV.create(w, w.get(Account, saver_id), full_day, {}, now_utc=datetime(2026, 10, 24, 18, 30))
+    late = False
+except SV.Refused as exc:
+    late = exc.code == "daily_cap"
+check(late, "at 23:30 her time it is still the full day")
+after_midnight, _ = SV.create(w, w.get(Account, saver_id), full_day, {}, now_utc=datetime(2026, 10, 24, 19, 30))
+check(after_midnight.local_date.isoformat() == "2026-10-25", "at 00:30 her time it is the next day, with room again")
+
+check(moment(at=datetime(2026, 10, 26, 9, 0), categories=["not_a_category"]).status_code == 422,
+      "only the fixed categories are accepted")
+check(moment(at=datetime(2026, 10, 26, 9, 0), emotions={"made_up": 3}).status_code == 422,
+      "and only real feelings")
+r = moment(at=datetime(2026, 10, 26, 9, 0), expected_rating=8, event_date="2026-11-01")
+check(r.status_code == 201 and r.json()["entry"]["expected_rating"] is None and r.json()["entry"]["event_date"] is None,
+      "a moment that already happened keeps no expected rating or day")
+check(moment(at=datetime(2026, 10, 26, 9, 0), type="anticipate", event_date="2026-10-20").status_code == 422,
+      "a day looked forward to cannot be before the moment")
+ahead = moment(at=datetime(2026, 10, 26, 9, 0), type="anticipate", what_happened="Eid at Nani's",
+               expected_rating=8, event_date="2026-10-28").json()["entry"]
+aid = ahead["id"]
+with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 27, 9, 0)):
+    r = c.post(f"/savoring/entries/{aid}/actual", json={"actual_rating": 9})
+    check(r.status_code == 409 and r.json()["detail"]["code"] == "not_yet", "how it really was waits for its day")
+with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 28, 20, 0)):
+    home = c.get("/savoring/home", params={"tz_offset": 300}).json()
+    check([f["id"] for f in home["follow_ups"]] == [aid], "on the day, it asks how it really was")
+    done = c.post(f"/savoring/entries/{aid}/actual", json={"actual_rating": 9}).json()
+    check(done["actual_rating"] == 9 and not done["follow_up_due"], "and keeps the answer beside what she expected")
+    check(c.get("/savoring/home", params={"tz_offset": 300}).json()["follow_ups"] == [], "then stops asking")
+
+fav = c.put(f"/savoring/entries/{first['entry']['id']}/favorite", json={"is_favorite": True}).json()
+check(fav["is_favorite"], "a moment can be kept as a favourite")
+edited = c.put(f"/savoring/entries/{first['entry']['id']}",
+               json={"what_happened": "Chai with Ammi, and the sunset", "mood_before": 4, "mood_after": 8,
+                     "emotions": {"grateful": 8}}).json()["entry"]
+check(edited["what_happened"] == "Chai with Ammi, and the sunset" and edited["mood_lift"] == 4
+      and edited["local_date"] == "2026-10-24" and edited["is_favorite"] and edited["mode"] == "quick",
+      "an edit replaces her words and ratings; its day, mode and favourite stay")
+listed = c.get("/savoring/entries", params={"favorite": True}).json()["entries"]
+check([e["id"] for e in listed] == [first["entry"]["id"]], "favourites can be listed alone")
+check(len(c.get("/savoring/entries", params={"type": "anticipate"}).json()["entries"]) == 1
+      and len(c.get("/savoring/entries", params={"emotion": "grateful"}).json()["entries"]) == 1
+      and len(c.get("/savoring/entries", params={"date": "2026-10-23"}).json()["entries"]) == 1,
+      "and by kind, by feeling, or by day")
+
+# From a check-in: its positive feelings come ticked, its harder ones do not.
+w = S()
+ci = Entry(account_id=saver_id, journal_type="check_in", status="completed", completed_at=datetime.utcnow())
+w.add(ci); w.flush()
+w.add(CapturedValue(entry_id=ci.id, key="feelings", value=json.dumps(["tired", "grateful", "peaceful"]),
+                    skipped=False, status="answered"))
+w.commit(); ci_id = str(ci.id)
+check(c.get("/savoring/prefill", params={"source_entry_id": ci_id}).json()["feelings"] == ["grateful", "peaceful"],
+      "a moment opened from a check-in starts with its positive feelings")
+linked = moment(at=datetime(2026, 10, 27, 20, 0), source_entry_id=ci_id, emotions={"grateful": 5}).json()["entry"]
+check(linked["source_entry_id"] == ci_id, "and remembers the check-in it came from")
+check(moment(at=datetime(2026, 10, 27, 20, 0), source_entry_id=aid).status_code == 409,
+      "only a check-in can be its source")
+
+# Another account sees none of it.
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, other_id)
+check(c.get(f"/savoring/entries/{aid}").status_code == 404
+      and c.put(f"/savoring/entries/{aid}/favorite", json={"is_favorite": True}).status_code == 404
+      and c.put(f"/savoring/entries/{aid}", json={"what_happened": "x"}).status_code == 404
+      and c.get("/savoring/entries").json()["entries"] == []
+      and c.get("/savoring/prefill", params={"source_entry_id": ci_id}).status_code == 409,
+      "another account can neither read, change nor list her moments")
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, saver_id)
+
+print("--- the Saving Journal: heatmap and streak")
+D = lambda day: datetime(2026, 10, day).date()  # noqa: E731
+check(SV.points_by_day([{"local_date": "2026-10-01", "mode": "quick"}, {"local_date": "2026-10-01", "mode": "full"},
+                        {"local_date": "2026-10-02", "mode": "quick"}, {"local_date": "2026-10-02", "mode": "quick"}])
+      == {D(1): 3, D(2): 2}, "a quick moment is one point, a full one two")
+check([SV.level(p) for p in (0, 1, 2, 3, 6)] == [0, 1, 2, 3, 3], "levels: none, one, two, three or more")
+grace, current, best = SV.streaks({D(1), D(2), D(3), D(5), D(6)}, D(6))
+check(grace == {D(4)} and current == 5 and best == 5, "one missed day between two is bridged as a grace day")
+grace, current, best = SV.streaks({D(1), D(2), D(4), D(6)}, D(6))
+check(grace == {D(3)} and current == 1 and best == 3, "but only once in seven days")
+grace, current, best = SV.streaks({D(1), D(2), D(5)}, D(5))
+check(grace == set() and current == 1 and best == 2, "two missed days start again")
+check(SV.streaks({D(1), D(2), D(3)}, D(4))[1:] == (3, 3), "today, not yet over, breaks nothing")
+grace, current, _ = SV.streaks({D(1), D(2), D(3)}, D(5))
+check(grace == {D(4)} and current == 3, "a missed yesterday holds until today is over")
+check(SV.streaks({D(1), D(2), D(3)}, D(6))[1] == 0, "and lets go after that")
+with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 28, 20, 0)):
+    hm = c.get("/savoring/heatmap", params={"tz_offset": 300}).json()
+by_day = {d["date"]: d for d in hm["days"]}
+check(len(hm["days"]) == 84 and hm["days"][-1]["date"] == "2026-10-28", "twelve weeks up to today by default")
+check(by_day["2026-10-24"]["points"] == 4 and by_day["2026-10-24"]["level"] == 3 and by_day["2026-10-23"]["level"] == 1,
+      f"a day's points add up; yesterday's backfilled moment counts on its own day: {by_day['2026-10-24']}")
+check(hm["streak"] == {"current": 5, "best": 5, "total_days": 5, "today_counted": False},
+      f"several moments a day count once; today still counts as pending: {hm['streak']}")
+check(c.get("/savoring/heatmap", params={"from": "2025-01-01", "to": "2026-10-28"}).status_code == 422,
+      "a heatmap covers at most a year")
+
+print("--- the Saving Journal: report, section D, CSV")
+
+
+def row(day, n=0, lift=None, **over):
+    base = {"id": str(uuid.uuid4()), "type": "moment", "mode": "quick", "local_date": f"2026-10-{day:02d}",
+            "created_at": f"2026-10-{day:02d}T{9 + n:02d}:00", "event_date": None, "is_favorite": False,
+            "what_happened": f"Moment {day}-{n}", "categories": [], "people": [], "places": [],
+            "mood_before": None if lift is None else 3, "mood_after": None if lift is None else 3 + lift,
+            "mood_lift": lift, "emotions": [], "sensory_note": None, "techniques": [], "why_good": None,
+            "souvenir_line": None, "expected_rating": None, "actual_rating": None, "follow_up_due": False}
+    return {**base, **over}
+
+
+few = SR.build([row(1, lift=2), row(2)], D(1), D(31), [])
+check(few["insights"] is None and few["locked"]["text"] == "Keep savoring to unlock insights: 5 more moments will show your patterns.",
+      "below seven moments, counts only and an invitation")
+check(few["summary"]["avg_mood_lift"] == 2 and few["summary"]["lift_entries"] == 1,
+      "the lift is averaged over moments with both moods only")
+senses = {"id": "senses", "name": "Noticed the senses"}
+shared = {"id": "shared", "name": "Shared it"}
+rush = [row(5, n, lift=1, techniques=[senses]) for n in range(5)] + [row(5, n, lift=9, techniques=[shared]) for n in (5, 6)]
+calm_week = [row(d, lift=4, techniques=[senses], emotions=[{"id": "joyful", "name": "Joyful", "intensity": 5},
+                                                           {"id": "u1", "name": "chai-happy", "intensity": None}])
+             for d in (12, 13, 14)]
+rep = SR.build(rush + calm_week, D(1), D(31), [])
+check(rep["summary"]["entries_total"] == 10 and rep["summary"]["avg_mood_lift"] == 2.1,
+      f"every moment is counted, but a day's trend only by its first five: {rep['summary']}")
+check(rep["techniques"] == [{"name": "Noticed the senses", "uses": 8, "avg_lift": 2.1}],
+      f"techniques ranked by lift, each with at least three uses: {rep['techniques']}")
+check({"name": "Other (your words)", "count": 3} in rep["emotions"], "her own words are grouped, not listed one by one")
+check(any("tended to be higher after savoring" in line for line in rep["insights"]), f"and insights unlock: {rep['insights']}")
+weeks = [row(d, lift=1) for d in (5, 6, 7, 12, 19, 20, 21, 22, 26)]
+moods = [(D(d), m) for d, m in ((6, 4), (7, 4), (13, 2), (14, 2), (20, 4), (21, 5), (27, 2))]
+check(any("This is a pattern, not a cause" in line for line in SR.build(weeks, D(5), D(31), moods)["insights"]),
+      "weeks with more savoring set beside check-in mood, as a pattern")
+
+empty = SR.savoring_section(S(), other_id, (D(1), D(31)), {"include_excerpts": True})
+check(empty == {"empty": True, "note": "No savoring entries in this period"}, "section D says when there is nothing")
+check(SR.savoring_section(S(), saver_id, "not a period", None)["empty"], "and never raises")
+section = SR.savoring_section(S(), saver_id, ("2026-10-01", "2026-10-31"), {"include_excerpts": False})
+check(section["section"] == "D" and section["entries_total"] == 8 and section["adherence"] == {"days_active": 5, "days_in_period": 31}
+      and "excerpts" not in section and "streak" not in json.dumps(section),
+      f"section D: counts and adherence, no streak, no words without consent: {section}")
+check(SR.savoring_section(S(), saver_id, ("2026-10-01", "2026-10-31"), {"include_excerpts": True})["excerpts"],
+      "her words only with consent")
+events = JE.events(S(), saver_id, D(1), D(31))
+check(len(events) == 8 and {e["module"] for e in events} == {"savoring"} and any(e["mood_signal"] == 4 for e in events),
+      "every moment is a journal_events row, its mood signal the lift")
+
+with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 28, 20, 0)):
+    moment(at=datetime(2026, 10, 28, 20, 0), what_happened="=HYPERLINK(\"x\")")
+    plain = c.get("/savoring/export.csv", params={"tz_offset": 300}).text
+    notes = c.get("/savoring/export.csv", params={"tz_offset": 300, "include_notes": True}).text
+    view = c.get("/reports/savoring", params={"tz_offset": 300}).json()
+check(plain.splitlines()[0].startswith("date,time,type,mode") and "Chai" not in plain,
+      "the CSV leaves her words out unless she asks")
+check("Chai with Ammi, and the sunset" in notes and "'=HYPERLINK" in notes, "with them, a formula is never run")
+check(view["summary"]["entries_total"] == 9 and view["summary"]["types"]["anticipate"] == 1,
+      f"the in-app report covers the last 30 days: {view['summary']}")
+
+r = moment(at=datetime(2026, 10, 31, 9, 0), what_happened="I want to kill myself tonight")
+event = r.json()["crisis_event"]
+check(r.status_code == 201 and event and event["tier"] in ("danger", "emergency") and event["show_resources"],
+      f"her words are screened as in every journal; the moment is still kept: {event}")
+for n in range(LOW := 5):
+    moment(at=datetime(2026, 10, 29 + n // 3, 9, 0), mood_before=2, mood_after=1)
+with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 30, 21, 0)):
+    check(c.get("/savoring/home", params={"tz_offset": 300}).json()["support"] == "break",
+          "moments that keep ending very low bring a gentle suggestion, never a block")
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
 
 print(f"\nALL {ok} CHECKS PASSED")

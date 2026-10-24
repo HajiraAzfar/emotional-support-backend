@@ -5,10 +5,9 @@ Check-in slots: three a day, each with its own window on the user's clock.
     afternoon  12:00 – 17:59
     evening    18:00 – 04:59 (the next morning; it stays the evening's day)
 
-A slot can be done inside its window. Once the window has passed it is
-"missed" and can still be added (late, or yesterday's backfilled); anything
-older than yesterday is closed. "Missed" is worked out from the clock, never
-stored: an unfilled slot leaves no row behind.
+A slot can be done only inside its window: once it has passed, it is closed,
+whether or not it was filled in (no backfill, so a day's report never changes
+after the day is over). An unfilled slot leaves no row behind.
 
 Everything here is pure and takes the user's local time, so the server and the
 tests reason about the same clock.
@@ -25,9 +24,7 @@ _WINDOWS = {
     EVENING: (time(18, 0), time(5, 0)),
 }
 
-UPCOMING, OPEN, MISSED, CLOSED = "upcoming", "open", "missed", "closed"
-# How many days back a missed slot can still be added: yesterday, and no further.
-BACKFILL_DAYS = 1
+UPCOMING, OPEN, CLOSED = "upcoming", "open", "closed"
 
 
 def local_now(tz_offset: int, now_utc: datetime | None = None) -> datetime:
@@ -57,20 +54,25 @@ def slot_at(moment: datetime) -> tuple[str, date]:
 
 
 def state(day: date, slot: str, moment: datetime) -> str:
-    """upcoming | open | missed (can still be added) | closed, at a local moment."""
+    """upcoming | open | closed, at a local moment."""
     opens, closes = window(day, slot)
     if moment < opens:
         return UPCOMING
     if moment < closes:
         return OPEN
-    return MISSED if day >= moment.date() - timedelta(days=BACKFILL_DAYS) else CLOSED
+    return CLOSED
 
 
 def can_record(day: date, slot: str, moment: datetime) -> bool:
-    return state(day, slot, moment) in (OPEN, MISSED)
+    return state(day, slot, moment) == OPEN
+
+
+def day_over(day: date, moment: datetime) -> bool:
+    """A day is over once its evening has closed: 05:00 the next morning."""
+    return moment >= window(day, EVENING)[1]
 
 
 def days_shown(moment: datetime) -> list[date]:
-    """The days whose slots the app shows: yesterday and today, oldest first."""
+    """The days whose slots the app shows (yesterday's to read): yesterday and today, oldest first."""
     today = moment.date()
     return [today - timedelta(days=1), today]

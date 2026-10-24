@@ -2,7 +2,7 @@ import logging
 
 from fastapi import FastAPI
 
-from app.routers import auth, crisis, health, onboarding, entries, libraries, insights, learning, voice
+from app.routers import auth, crisis, health, onboarding, entries, libraries, insights, learning, savoring, voice
 
 # App loggers at INFO (skill, triage and card per reply); libraries stay at WARNING.
 logging.basicConfig(level=logging.WARNING)
@@ -18,4 +18,5 @@ app.include_router(entries.router)   # yeh yahan aana chahiye, baaki routers ke 
 app.include_router(libraries.router)
 app.include_router(insights.router)
 app.include_router(learning.router)
+app.include_router(savoring.router)
 app.include_router(voice.router)

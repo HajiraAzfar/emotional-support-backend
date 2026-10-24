@@ -629,6 +629,12 @@ def _slot_entry(db: Session, account: Account, day, slot: str) -> Entry | None:
     ).first()
 
 
+def _slot_closed(entry: Entry) -> bool:
+    """A slot check-in whose window has passed: nothing in it can be added or changed."""
+    return bool(entry.slot) and not slots.can_record(entry.local_date, entry.slot,
+                                                     slots.local_now(entry.tz_offset or 0))
+
+
 def _existing_slot(db: Session, entry: Entry, account: Account) -> EntryStepOut:
     """One check-in per slot per day: a started one is resumed, a finished one is done."""
     if entry.status == "completed":
@@ -667,7 +673,11 @@ def list_entries(
             Entry.id.in_(select(CapturedValue.entry_id).where(CapturedValue.value.ilike(like))),
         ))
 
-    summaries = [_summary(db, e) for e in query.order_by(Entry.started_at.desc()).limit(200).all()]
+    entries = query.order_by(Entry.started_at.desc()).limit(200).all()
+    if status_ == "in_progress":
+        # A check-in left unfinished when its window closed cannot be carried on.
+        entries = [e for e in entries if not _slot_closed(e)]
+    summaries = [_summary(db, e) for e in entries]
     if since_days:
         cutoff = datetime.utcnow() - timedelta(days=since_days)
         summaries = [s for s in summaries if s.last_activity_at >= cutoff]
@@ -798,8 +808,8 @@ def check_in_slots(
 ):
     """
     Yesterday's and today's three check-ins on her clock: done, started, open,
-    missed (it can still be added), upcoming, or closed. Missed is worked out
-    here, never stored, and the wording that shows it is the app's to keep kind.
+    upcoming, or closed (passed without being finished; nothing can be added).
+    Worked out here, never stored; the wording that shows it is the app's to keep kind.
     """
     moment = slots.local_now(tz_offset)
     current, current_day = slots.slot_at(moment)
@@ -1047,6 +1057,9 @@ def submit_capture(
 
     if entry.status != "in_progress" or not capture.has_schedule(journal_type):
         raise HTTPException(status_code=409, detail="This entry is not collecting values")
+    # A check-in is answered inside its own window only: no backfill.
+    if _slot_closed(entry):
+        raise HTTPException(status_code=409, detail="This check-in has closed.")
     # FR-JRN-007: nothing is collected until the scope notice is acknowledged.
     if capture.notice_for(journal_type, _focus_codes(db, account)) and not entry.notice_acknowledged:
         raise HTTPException(status_code=409, detail="The notice must be acknowledged first")
@@ -1186,6 +1199,12 @@ def revise_capture(
     journal_type = _journal_type(entry)
     if not capture.has_schedule(journal_type):
         raise HTTPException(status_code=409, detail="This entry does not record values")
+    # A slot check-in's reports are built from it as it was finished, so once
+    # finished (or closed) it stays as it is.
+    if entry.slot and entry.status == "completed":
+        raise HTTPException(status_code=409, detail="A finished check-in is kept as it was.")
+    if _slot_closed(entry):
+        raise HTTPException(status_code=409, detail="This check-in has closed.")
     # Once the conversation has read her answers and replied to them, changing
     # them underneath it would make the transcript describe something she never
     # said.

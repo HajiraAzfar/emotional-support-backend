@@ -15,6 +15,8 @@ class Entry(Base):
             "uq_entries_checkin_slot", "account_id", "local_date", "slot", unique=True,
             postgresql_where=text("slot IS NOT NULL"), sqlite_where=text("slot IS NOT NULL"),
         ),
+        # A journal's entries day by day: the Saving Journal's daily cap and heatmap.
+        Index("ix_entries_account_type_date", "account_id", "journal_type", "local_date"),
     )
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
@@ -50,5 +52,9 @@ class Entry(Base):
     timezone = Column(String(64), nullable=True)
     # The check-in a journal was opened from, so it can start from its feelings.
     source_entry_id = Column(UUID(as_uuid=True), ForeignKey("entries.id", ondelete="SET NULL"), nullable=True)
+    # Saving Journal (core/savoring.py): a moment she marked to keep, and for a
+    # moment she looks forward to, the day it is expected to happen.
+    is_favorite = Column(Boolean, default=False, server_default=text("false"), nullable=False)
+    event_date = Column(Date, nullable=True)
     started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)

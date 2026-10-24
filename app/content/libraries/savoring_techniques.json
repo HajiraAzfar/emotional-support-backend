@@ -1,0 +1,19 @@
+{
+  "_clinical_status": "DRAFT_NOT_CLINICALLY_APPROVED",
+  "version": "1",
+  "status": "draft — pending clinical review. The savouring techniques she can say she used (Bryant & Veroff's savouring strategies, in plain words).",
+  "categories": [
+    {
+      "id": "techniques",
+      "name": "How you savoured it",
+      "items": [
+        {"id": "senses", "name": "Noticed the senses"},
+        {"id": "present", "name": "Stayed fully present"},
+        {"id": "shared", "name": "Shared it"},
+        {"id": "souvenir", "name": "Wrote a souvenir line"},
+        {"id": "thanked", "name": "Thanked someone or something"},
+        {"id": "credit", "name": "Gave myself credit"}
+      ]
+    }
+  ]
+}
