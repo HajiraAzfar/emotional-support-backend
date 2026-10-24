@@ -327,6 +327,63 @@ def generate_perspective(system_prompt: str) -> str | None:
     return text
 
 
+MAX_QUESTION_CHARS = 220
+
+
+class SocraticQuestion(BaseModel):
+    question: str
+
+
+def generate_socratic_question(system_prompt: str) -> str | None:
+    """
+    Thought Journal, "Help me think": one open question about the evidence.
+    None whenever it can't be used; the app then asks one of its fixed questions.
+    """
+    if settings.LLM_MOCK:
+        return None
+    try:
+        response = _get_client().responses.parse(
+            model=settings.OPENAI_RESPONSE_MODEL,
+            instructions=system_prompt,
+            input="Ask the question now.",
+            text_format=SocraticQuestion,
+            store=False,
+        )
+        result = response.output_parsed
+    except LLM_FAILURES as exc:
+        logger.warning("Socratic question failed: %s", type(exc).__name__)
+        return None
+    text = result.question.strip() if result else ""
+    if not text or len(text) > MAX_QUESTION_CHARS or not text.endswith("?") or text.count("?") > 1:
+        return None
+    return text
+
+
+class TrapSuggestion(BaseModel):
+    trap_ids: list[str]
+
+
+def suggest_traps(system_prompt: str, allowed: set[str]) -> list[str] | None:
+    """Thought Journal: up to two thinking patterns from the fixed list, for her to confirm. None on failure."""
+    if settings.LLM_MOCK:
+        return None
+    try:
+        response = _get_client().responses.parse(
+            model=settings.OPENAI_RESPONSE_MODEL,
+            instructions=system_prompt,
+            input="Choose now.",
+            text_format=TrapSuggestion,
+            store=False,
+        )
+        result = response.output_parsed
+    except LLM_FAILURES as exc:
+        logger.warning("Trap suggestion failed: %s", type(exc).__name__)
+        return None
+    if result is None:
+        return None
+    return [t for t in dict.fromkeys(result.trap_ids) if t in allowed][:2]
+
+
 class Romanized(BaseModel):
     text: str
 

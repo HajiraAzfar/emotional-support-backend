@@ -24,7 +24,7 @@ from datetime import date, datetime, timedelta
 
 from sqlalchemy.orm import Session
 
-from app.core import capture, insights, slots
+from app.core import capture, insights, slots, streaks as shared_streaks
 from app.models.captured_value import CapturedValue
 from app.models.entry import Entry
 
@@ -386,49 +386,9 @@ def points_by_day(rows: list[dict]) -> dict[date, int]:
     return out
 
 
-def level(points: int) -> int:
-    """0 none, 1 one point, 2 two, 3 three or more."""
-    return min(points, 3)
-
-
-def streaks(active: set[date], today: date) -> tuple[set[date], int, int]:
-    """
-    (grace days, current streak, best streak). A day with any moment counts;
-    the streak is the number of such days in a row. One missed day between two
-    counted ones is bridged automatically, at most once in any seven days, and
-    shown as a grace day. Today is never a miss while it lasts, and a missed
-    yesterday stays bridged until today is over, so the streak does not drop
-    before she has had the chance to keep it.
-    """
-    grace: set[date] = set()
-    run = best = 0
-    last_grace = None
-    day = min(active) if active else today
-    one = timedelta(days=1)
-    while day <= today:
-        if day in active:
-            run += 1
-        elif day == today:
-            pass
-        elif (day - one in active and (day + one in active or day + one == today)
-              and (last_grace is None or (day - last_grace).days >= 7)):
-            grace.add(day)
-            last_grace = day
-        else:
-            run = 0
-        best = max(best, run)
-        day += one
-    return grace, run, best
+# The level, the streak and the grid are shared with the other journals (core/streaks.py).
+level, streaks = shared_streaks.level, shared_streaks.streaks
 
 
 def heatmap(rows: list[dict], start: date, end: date, today: date) -> dict:
-    points = points_by_day(rows)
-    grace, current, best = streaks(set(points), today)
-    days = []
-    day = start
-    while day <= end:
-        days.append({"date": day.isoformat(), "points": points.get(day, 0), "level": level(points.get(day, 0)),
-                     "grace_day": day in grace})
-        day += timedelta(days=1)
-    return {"days": days, "streak": {"current": current, "best": best, "total_days": len(points),
-                                     "today_counted": today in points}}
+    return shared_streaks.heatmap(points_by_day(rows), start, end, today)

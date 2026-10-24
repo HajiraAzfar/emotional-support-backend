@@ -1,0 +1,16 @@
+{
+  "_clinical_status": "DRAFT_NOT_CLINICALLY_APPROVED",
+  "_comment": "The Thought Journal's report insights (core/thought_report.py). Each is a pattern in what she recorded, shown only once MIN_RECORDS finished records have the values behind it. Never a cause, never advice, never a judgement of a thought. {placeholders} are filled in by the code.",
+  "locked": "Keep going to see your patterns: {n} more finished record{s} with before and after ratings will show them.",
+  "insights": {
+    "belief_drop": "Your belief in the first thought tended to drop by about {drop} points after working through it.",
+    "belief_same": "Your belief in the first thought tended to stay about where it was. That happens, and noticing it still counts.",
+    "emotion_drop": "The feelings you rated tended to ease by about {drop} points out of 100.",
+    "trap": "\"{trap}\" was the thinking pattern you noticed most.",
+    "tag": "Thoughts about \"{tag}\" came up most.",
+    "against": "When you wrote evidence against the thought, your belief tended to drop more ({with_} against {without} points).",
+    "balanced": "The balanced thoughts you wrote tended to feel about {belief}% believable."
+  },
+  "pattern": "Thoughts about \"{tag}\" with \"{trap}\" came back {n} times with the belief staying high.",
+  "empty_section": "No thought records in this period"
+}

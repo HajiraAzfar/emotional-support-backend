@@ -4,17 +4,16 @@ journals, for the combined clinical report —
 {user_id, module, entry_id, local_date, created_at, mood_signal}.
 
 A function rather than a database view, so the tests (SQLite) and Postgres
-read it the same way. The Saving Journal is the first to supply its rows; the
-check-in, thought and exposure journals add theirs when the combined report is
-built.
+read it the same way. The Saving and Thought journals supply their rows; the
+check-in and exposure journals add theirs when the combined report is built.
 """
 from datetime import date
 
 from sqlalchemy.orm import Session
 
-from app.core import savoring_report
+from app.core import savoring_report, thought_report
 
-SOURCES = (savoring_report.journal_events,)
+SOURCES = (savoring_report.journal_events, thought_report.journal_events)
 
 
 def events(db: Session, account_id, start: date, end: date) -> list[dict]:

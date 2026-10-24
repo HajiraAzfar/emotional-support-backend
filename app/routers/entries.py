@@ -1023,15 +1023,19 @@ def delete_entry(
     account: Account = Depends(get_current_user),
 ):
     """FR-ENT-008: permanent. Deleted explicitly as well as by FK cascade, so nothing is left behind."""
-    entry = _get_entry(db, entry_id, account)
+    remove_entry(db, _get_entry(db, entry_id, account))
+    db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+def remove_entry(db: Session, entry: Entry):
+    """An entry and everything in it; a safety flag raised in it stays, unlinked."""
     db.query(Message).filter(Message.entry_id == entry.id).delete(synchronize_session=False)
     db.query(CapturedValue).filter(CapturedValue.entry_id == entry.id).delete(synchronize_session=False)
     db.query(CrisisEvent).filter(CrisisEvent.entry_id == entry.id).update(
         {CrisisEvent.entry_id: None}, synchronize_session=False
     )
     db.delete(entry)
-    db.commit()
-    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.post("/{entry_id}/captures", response_model=EntryStepOut)

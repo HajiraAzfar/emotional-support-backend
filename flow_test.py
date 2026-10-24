@@ -2294,6 +2294,194 @@ for n in range(LOW := 5):
 with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 30, 21, 0)):
     check(c.get("/savoring/home", params={"tz_offset": 300}).json()["support"] == "break",
           "moments that keep ending very low bring a gentle suggestion, never a block")
+
+print("--- the Thought Journal: drafts, finishing, the edit window (core/thought.py)")
+from app.core import thought as TH, thought_report as TR
+from app.models.focus_area import FocusArea
+s = S()
+thinker = Account(email="thinker@x.com"); stranger = Account(email="stranger@x.com"); survivor = Account(email="survivor@x.com")
+s.add_all([thinker, stranger, survivor]); s.commit()
+thinker_id, stranger_id, survivor_id = thinker.id, stranger.id, survivor.id
+s.add(FocusArea(account_id=survivor_id, code="trauma_ptsd")); s.commit()
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, thinker_id)
+
+# A record from before the module: no beliefs, no tags, no mode.
+w = S()
+legacy = Entry(account_id=thinker_id, journal_type="thought", status="completed",
+               started_at=datetime(2026, 10, 20, 5, 0), completed_at=datetime(2026, 10, 20, 5, 30))
+w.add(legacy); w.flush()
+for key, value in (("situation", "Meeting ran late"), ("automatic_thought", "They think I'm slow"),
+                   ("feelings", ["nervous"]), ("emotions_before", {"nervous": 70}), ("emotions_after", {"nervous": 40}),
+                   ("revised_thought", "One late meeting says little about me")):
+    w.add(CapturedValue(entry_id=legacy.id, key=key, value=json.dumps(value), skipped=False, status="answered"))
+w.commit(); legacy_id = str(legacy.id)
+old = c.get(f"/thought/entries/{legacy_id}", params={"tz_offset": 300}).json()
+check(old["balanced_thought"] == "One late meeting says little about me" and old["belief_drop"] is None
+      and old["emotion_drop"] == 30 and old["mode"] == "full" and old["client_id"],
+      f"a record from before reads by the new names, with no belief and its feelings' change: {old}")
+check([e["id"] for e in c.get("/thought/entries").json()["entries"]] == [legacy_id], "and is in the history as usual")
+
+
+def record(cid, at=datetime(2026, 10, 24, 10, 0), **body):
+    with patch("app.core.slots.local_now", return_value=at):
+        return c.put(f"/thought/records/{cid}", json={"tz_offset": 300, **body})
+
+
+cid = str(uuid.uuid4())
+draft = record(cid, situation="My manager went quiet in the meeting", situation_tags=["work"]).json()["record"]
+check(draft["status"] == "in_progress" and draft["situation"] == "My manager went quiet in the meeting",
+      "a step saves a draft")
+again = record(cid, situation="My manager went quiet in the meeting", situation_tags=["work"],
+               automatic_thought="She thinks my work is bad").json()["record"]
+check(again["id"] == draft["id"], "every step is the same record")
+home = c.get("/thought/home", params={"tz_offset": 300}).json()
+check([d["id"] for d in home["drafts"]] == [draft["id"]] and home["total_completed"] == 1,
+      "a draft waits to be carried on, and only finished records are counted")
+check(record(cid, complete=True, situation="x").status_code == 422, "it cannot finish without the thought")
+r1_body = dict(situation="My manager went quiet", situation_tags=["work"], automatic_thought="She thinks my work is bad",
+               belief_before=85, belief_after=40, balanced_belief=60, thinking_traps=["mind_reading"],
+               emotions=[{"feeling": "nervous", "before": 80, "after": 50}, {"feeling": "sad", "before": 60, "after": 60}],
+               evidence_against="She praised the report last week", balanced_thought="She may just be tired")
+done = record(cid, at=datetime(2026, 10, 25, 9, 0), complete=True, mode="full", **r1_body).json()
+r1 = done["record"]
+check(r1["status"] == "completed" and r1["local_date"] == "2026-10-25" and r1["belief_drop"] == 45
+      and r1["emotion_drop"] == 15 and r1["evidence_against"] and not done["gentle"],
+      f"finished: counted on the day it was finished, belief 85 to 40, feelings eased by 15 on average: {r1}")
+check(record(cid, complete=True, situation="x", situation_tags=["not_a_tag"], automatic_thought="y").status_code == 422,
+      "only the fixed situation tags are accepted")
+
+# An edit sends the whole record, as the app's edit screen does.
+edited = c.put(f"/thought/entries/{r1['id']}", json={**r1_body, "next_step": "Ask her on Monday"}).json()["record"]
+check(edited["next_step"] == "Ask her on Monday" and edited["edited_at"] is None and edited["belief_drop"] == 45,
+      "within a day an edit is just an edit")
+w = S(); w.get(Entry, uuid.UUID(r1["id"])).completed_at = datetime.utcnow() - timedelta(hours=25); w.commit()
+later = c.put(f"/thought/entries/{r1['id']}", json={**r1_body, "next_step": "Ask her on Monday"}).json()["record"]
+check(later["edited_at"] is not None and not later["editable_freely"], "after a day it is marked edited")
+carried = c.put(f"/thought/entries/{legacy_id}", json={
+    "situation": "Meeting ran late", "automatic_thought": "They think I'm slow", "belief_before": 70, "belief_after": 50,
+    "emotions": [{"feeling": "nervous", "before": 70, "after": 40}],
+    "balanced_thought": "One late meeting says little about me"}).json()["record"]
+check(carried["belief_drop"] == 20 and carried["emotion_drop"] == 30, "a record from before can take the new ratings")
+
+# Three in a day bring a kind word; a fourth is still welcome.
+for n in range(3):
+    last = record(str(uuid.uuid4()), at=datetime(2026, 10, 26, 9 + n), complete=True, automatic_thought=f"Thought {n}",
+                  situation="Study", situation_tags=["study"]).json()
+check(last["gentle"], "the third record of a day brings a gentle suggestion")
+check(record(str(uuid.uuid4()), at=datetime(2026, 10, 26, 13), complete=True, automatic_thought="Four",
+             situation="Study").status_code == 200, "and never a block")
+
+# Safety: changed words are screened at the step, and she chooses whether to go on.
+sid = str(uuid.uuid4())
+flagged = record(sid, situation="Everything at home", automatic_thought="I want to kill myself tonight").json()
+check(flagged["crisis_event"] and flagged["crisis_event"]["show_resources"] and flagged["record"]["status"] == "in_progress",
+      "a crisis word at a step is flagged and the resources open; the draft is kept")
+check(record(sid, situation="Everything at home", automatic_thought="I want to kill myself tonight",
+             belief_before=90).json()["crisis_event"] is None, "the same words are not flagged twice")
+check(c.post(f"/thought/entries/{flagged['record']['id']}/question", json={"side": "for"}).json()["question"] is None,
+      "after a flag no model writes anything for the record")
+
+# From a check-in: its feelings come ticked.
+w = S()
+ci = Entry(account_id=thinker_id, journal_type="check_in", status="completed", completed_at=datetime.utcnow())
+w.add(ci); w.flush()
+w.add(CapturedValue(entry_id=ci.id, key="feelings", value=json.dumps(["worried", "tired"]), skipped=False, status="answered"))
+w.add(CapturedValue(entry_id=ci.id, key="anxiety", value=json.dumps(8), skipped=False, status="answered"))
+w.commit(); ci_id = str(ci.id)
+check(c.get("/thought/prefill", params={"source_entry_id": ci_id}).json()["feelings"] == ["worried", "tired"],
+      "a record opened from a check-in starts with its feelings")
+linked = record(str(uuid.uuid4()), at=datetime(2026, 10, 27, 9), complete=True, source_entry_id=ci_id,
+                situation="Exam tomorrow", automatic_thought="I'll fail").json()["record"]
+check(linked["source_entry_id"] == ci_id, "and keeps where it came from")
+check(record(str(uuid.uuid4()), source_entry_id=r1["id"], automatic_thought="x").status_code == 409,
+      "only a check-in can be its source")
+
+print("--- the Thought Journal: AI assist, drafts expiring, the trauma variant")
+check(c.post(f"/thought/entries/{r1['id']}/question", json={"side": "against"}).json() == {"question": None}
+      and c.post(f"/thought/entries/{r1['id']}/traps").json() == {"suggestions": None},
+      "with no model, assist says so and the app asks its fixed questions")
+TH._assist_calls.clear()
+with patch("app.core.llm_client.generate_socratic_question", return_value="What would you tell a friend?") as asked, \
+        patch("app.core.llm_client.suggest_traps", return_value=["mind_reading"]):
+    check(c.post(f"/thought/entries/{r1['id']}/question", json={"side": "for"}).json()["question"]
+          == "What would you tell a friend?", "when she asks, one open question")
+    prompt = " ".join(asked.call_args[0][0].split())
+    check("<user_text>She thinks my work is bad</user_text>" in prompt and "write the balanced" not in prompt.lower()
+          and "suggest what a balanced thought would be" in prompt, "her words go in as information, with the limits stated")
+    check(c.post(f"/thought/entries/{r1['id']}/traps").json()["suggestions"] == ["mind_reading"],
+          "and patterns are suggested for her to confirm")
+    for _ in range(TH.ASSIST_CALLS):
+        c.post(f"/thought/entries/{r1['id']}/question", json={"side": "for"})
+    check(c.post(f"/thought/entries/{r1['id']}/question", json={"side": "for"}).json()["question"] is None,
+          "and it is rate-limited")
+
+w = S()
+stale = Entry(account_id=thinker_id, journal_type="thought", status="in_progress", client_id=uuid.uuid4(),
+              started_at=datetime.utcnow() - timedelta(days=8))
+w.add(stale); w.flush()
+w.add(CrisisEvent(account_id=thinker_id, entry_id=stale.id, field="situation", tier="danger"))
+w.commit(); stale_id = stale.id
+home = c.get("/thought/home", params={"tz_offset": 300}).json()
+check(str(stale_id) not in {d["id"] for d in home["drafts"]} and S().get(Entry, stale_id) is None,
+      "a draft older than a week is gone")
+check(S().query(CrisisEvent).filter(CrisisEvent.field == "situation", CrisisEvent.account_id == thinker_id,
+                                     CrisisEvent.entry_id.is_(None)).count() == 1, "but a safety flag raised in it stays")
+
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, survivor_id)
+home = c.get("/thought/home").json()
+check(not home["asks_evidence_for"] and not home["situation_required"], "the trauma variant is told to the app")
+r = record(str(uuid.uuid4()), complete=True, automatic_thought="It was my fault", evidence_for="I was there").json()
+check(r["record"]["status"] == "completed" and r["record"]["evidence_for"] is None,
+      "it finishes without a situation, and keeps no 'what makes it feel true'")
+
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, stranger_id)
+check(c.get(f"/thought/entries/{r1['id']}").status_code == 404
+      and c.put(f"/thought/entries/{r1['id']}/favorite", json={"is_favorite": True}).status_code == 404
+      and c.post(f"/thought/entries/{r1['id']}/question", json={"side": "for"}).status_code == 404
+      and record(cid, automatic_thought="mine now").status_code == 409
+      and c.get("/thought/entries").json()["entries"] == [],
+      "another account can neither read, change, ask about nor take over her records")
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, thinker_id)
+
+print("--- the Thought Journal: heatmap, report, section B")
+with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 27, 20, 0)):
+    hm = {d["date"]: d for d in c.get("/thought/heatmap", params={"tz_offset": 300}).json()["days"]}
+check(hm["2026-10-26"]["level"] == 3 and hm["2026-10-25"]["level"] == 1 and hm["2026-10-24"]["points"] == 0,
+      "a day counts its finished records only; a draft day counts nothing")
+view = c.get("/reports/thought", params={"from": "2026-10-01", "to": "2026-10-31"}).json()
+check(view["summary"]["completed"] == 7 and view["summary"]["with_belief"] == 2 and view["summary"]["avg_belief_drop"] is None
+      and view["insights"] is None and "3 more finished records" in view["locked"]["text"],
+      f"averages wait for five records that have the ratings; older ones count only in totals: {view['summary']}")
+for n in range(4):
+    record(str(uuid.uuid4()), at=datetime(2026, 10, 28, 9 + n), complete=True, situation="Work again",
+           situation_tags=["work"], thinking_traps=["mind_reading"], automatic_thought=f"They don't rate me {n}",
+           belief_before=80, belief_after=75, emotions=[{"feeling": "nervous", "before": 70, "after": 60}])
+with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 28, 21, 0)):
+    view = c.get("/reports/thought", params={"from": "2026-10-01", "to": "2026-10-31", "tz_offset": 300}).json()
+    home = c.get("/thought/home", params={"tz_offset": 300}).json()
+check(view["summary"]["with_belief"] == 6 and view["summary"]["avg_belief_drop"] == 14.2 and view["insights"]
+      and any('"Mind reading" was the thinking pattern' in line for line in view["insights"])
+      and view["summary"]["linked_high_checkins"] == 1,
+      f"from five, the averages and the patterns show: {view['summary']} {view['insights']}")
+check(view["reframes"][0]["belief_drop"] == 45, "the reframes that went with the biggest drop are the highlights")
+check(home["pattern"] == {"tag": "Work", "trap": "Mind reading", "records": 4},
+      f"a theme that keeps coming back with the belief staying high is noticed: {home['pattern']}")
+
+empty = TR.thought_section(S(), stranger_id, (D(1), D(31)), {"include_excerpts": True})
+check(empty == {"empty": True, "note": "No thought records in this period"}, "section B says when there is nothing")
+check(TR.thought_section(S(), thinker_id, None, None)["empty"], "and never raises")
+section = TR.thought_section(S(), thinker_id, ("2026-10-01", "2026-10-31"), {"include_excerpts": False})
+check(section["section"] == "B" and section["completed"] == 11 and section["recurring_pattern"]["records"] == 4
+      and "excerpts" not in section and "streak" not in json.dumps(section),
+      f"section B: counts, ratings and the recurring theme, no words without consent: {section}")
+excerpts = TR.thought_section(S(), thinker_id, ("2026-10-01", "2026-10-31"), {"include_excerpts": True})["excerpts"]
+check(excerpts and "balanced_thought" in excerpts[0] and "revised_thought" not in excerpts[0],
+      "with consent, her words under the report's own names")
+check(any(e["module"] == "thought" and e["mood_signal"] == 1.5 for e in JE.events(S(), thinker_id, D(1), D(31))),
+      "finished records are journal_events rows; the signal is how much the feelings eased")
+data = insights_core.build(S(), thinker_id, "all", {}, tz_offset=300)
+check(pdf_report.render(data, name=None, made_on=D(28)).startswith(b"%PDF") and data["rating_shifts"],
+      "old and new records still go into Insights and its PDF")
 app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
 
 print(f"\nALL {ok} CHECKS PASSED")

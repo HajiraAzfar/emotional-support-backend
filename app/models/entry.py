@@ -56,5 +56,7 @@ class Entry(Base):
     # moment she looks forward to, the day it is expected to happen.
     is_favorite = Column(Boolean, default=False, server_default=text("false"), nullable=False)
     event_date = Column(Date, nullable=True)
+    # Thought Journal: a finished record changed more than a day after it was finished.
+    edited_at = Column(DateTime, nullable=True)
     started_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     completed_at = Column(DateTime, nullable=True)
