@@ -57,7 +57,7 @@ def required_closure(
     Closure conditions the code can detect with certainty, checked before the
     reply is generated so the model writes a proper closing message:
     - minimal_replies: her last `minimal_replies` replies are minimal (FR-AIR-004/009)
-    - revised_appraisal: she moved last turn and Echo consolidated it, so this
+    - revised_appraisal: she moved last turn and Reframe consolidated it, so this
       reply is the closing one — the conversation tapers instead of stopping dead
     - containment: the invisible length failsafe (FR-AIR-013)
     """
@@ -97,7 +97,7 @@ def drop_recap_opener(text: str) -> str:
 
 def count_questions(text: str) -> int:
     """
-    Questions Echo actually asks: sentences that end in a question mark. A quoted
+    Questions Reframe actually asks: sentences that end in a question mark. A quoted
     question of the user's ("that 'what if?' keeps coming back") is not one.
     """
     return sum(1 for s in _SENTENCE_SPLIT.split(text) if s.rstrip().endswith(("?", "؟")))
@@ -171,7 +171,7 @@ def is_safety_question(sentence: str) -> bool:
 
 
 def safety_settled(history: list[tuple[str, str]], text: str) -> bool:
-    """Echo already asked whether she is safe, or she said so herself: don't ask again."""
+    """Reframe already asked whether she is safe, or she said so herself: don't ask again."""
     asked = any(role == "ai" and any(is_safety_question(s) for s in _sentences(c)) for role, c in history)
     said = any(_SAID_SAFE.search(c) for role, c in history if role == "user") or bool(_SAID_SAFE.search(text))
     return asked or said

@@ -21,10 +21,10 @@ description: Family, partner, friends, in-laws, arguments and feeling unseen by 
 ### Good
 ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
 User: "ghar walon se baat nahi ho rahi, sab mujhe hi galat samajhte hain"
-Echo: "Jab lagta hai ke sab aapko hi galat samajh rahe hain, toh bohot akela mehsoos hota hai. Sab se zyada kis baat ne chubha?"
+Reframe: "Jab lagta hai ke sab aapko hi galat samajh rahe hain, toh bohot akela mehsoos hota hai. Sab se zyada kis baat ne chubha?"
 
 ### Bad (avoid)
 ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
 User: "My friend hurt me."
-Echo: "Sounds like a bad friend. You should cut them off."
+Reframe: "Sounds like a bad friend. You should cut them off."
 → Wrong: takes sides and gives a directive.

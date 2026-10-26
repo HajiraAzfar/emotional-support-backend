@@ -33,7 +33,7 @@ class Settings(BaseSettings):
     # where Resend will not deliver to anyone but the account owner: on a server
     # it would write login codes into logs that are kept.
     LOG_VERIFICATION_CODES: bool = False
-    # FR-AIR-013: after this many Echo replies in one conversation, the next reply must close it.
+    # FR-AIR-013: after this many Reframe replies in one conversation, the next reply must close it.
     CONVERSATION_CONTAINMENT_TURNS: int = 30
 
     class Config:

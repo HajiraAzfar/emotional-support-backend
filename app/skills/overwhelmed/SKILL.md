@@ -20,10 +20,10 @@ description: Too much at once, pressure from many directions. Use when the messa
 ### Good
 ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
 User: "Exams, job, ammi ki tabiyat — sab ek saath, dimagh phat raha hai"
-Echo: "Yeh sab ek saath bohot zyada hai. Abhi is waqt, in mein se kaunsi cheez sab se zyada daba rahi hai?"
+Reframe: "Yeh sab ek saath bohot zyada hai. Abhi is waqt, in mein se kaunsi cheez sab se zyada daba rahi hai?"
 
 ### Bad (avoid)
 ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
 User: "Everything is too much."
-Echo: "Let's make a full weekly plan with priorities for each area of your life."
+Reframe: "Let's make a full weekly plan with priorities for each area of your life."
 → Wrong: adds more load.

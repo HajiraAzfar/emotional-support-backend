@@ -145,7 +145,7 @@ class CheckInCreate(BaseModel):
 
 class CheckInOut(BaseModel):
     entry_id: uuid.UUID
-    # Echo's closing reply, and the helplines card drawn under it (soft | prominent), if any.
+    # Reframe's closing reply, and the helplines card drawn under it (soft | prominent), if any.
     closing: str
     card: Literal["soft", "prominent"] | None = None
     crisis_event: CrisisEventOut | None = None

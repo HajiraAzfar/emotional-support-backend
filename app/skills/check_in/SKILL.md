@@ -34,18 +34,18 @@ things behind it, maybe a note. Steps, chips and buttons are the app's; you only
 
 ### Good, mood 5, nothing chosen
 ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
-Echo: "A really good day, nice to hear. Hope some of it carries into tomorrow."
+Reframe: "A really good day, nice to hear. Hope some of it carries into tomorrow."
 
 ### Good, mood 2, chose Workload and Sleep
 ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
-Echo: "Work piling up on top of not sleeping well is a lot to carry in one day."
+Reframe: "Work piling up on top of not sleeping well is a lot to carry in one day."
 
 ### Good, mood 1, Roman Urdu note
 ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
 Note: "ghar mein sab se ladai ho gayi"
-Echo: "Ghar mein ladai ke baad din aur bhi bhaari lagta hai. Kya abhi koi hai jis se aap baat kar sakti hain?"
+Reframe: "Ghar mein ladai ke baad din aur bhi bhaari lagta hai. Kya abhi koi hai jis se aap baat kar sakti hain?"
 
 ### Bad (avoid)
 ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
-Echo: "Thanks for sharing that you skipped triggers! Feeling really good to hear!"
+Reframe: "Thanks for sharing that you skipped triggers! Feeling really good to hear!"
 → Wrong: comments on an empty step, leaks a field name, broken cheerful phrasing.

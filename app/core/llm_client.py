@@ -461,7 +461,7 @@ def generate_reflection(
     text: str | None,
 ) -> Reflection:
     """
-    Main conversation call. text=None means Echo speaks first (FR-AIR-002).
+    Main conversation call. text=None means Reframe speaks first (FR-AIR-002).
     Raises LLMError if no usable reply comes back.
     """
     if settings.LLM_MOCK:

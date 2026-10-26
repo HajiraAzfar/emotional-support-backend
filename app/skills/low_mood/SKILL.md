@@ -21,10 +21,10 @@ description: Sadness, heaviness, no energy or no motivation. Use when the messag
 ### Good
 ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
 User: "kuch karne ka dil nahi karta, bas lete rehna hai"
-Echo: "Lagta hai aaj sab kuch bohot bhaari mehsoos ho raha hai. Kab se aisa lag raha hai?"
+Reframe: "Lagta hai aaj sab kuch bohot bhaari mehsoos ho raha hai. Kab se aisa lag raha hai?"
 
 ### Bad (avoid)
 ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
 User: "I have no energy to do anything."
-Echo: "Try making a to-do list and a morning routine!"
+Reframe: "Try making a to-do list and a morning routine!"
 → Wrong: jumps to productivity advice.

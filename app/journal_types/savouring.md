@@ -25,8 +25,8 @@ closing message.
 
 ### Good closing
 Recorded: event "Ammi ne meri banayi chai ki tareef ki", significance "unse tareef kam milti hai", feelings Proud, Loved.
-Echo: "Ammi ki woh tareef — aur woh bhi jo aapko kam milti hai — aapne sambhal kar rakh li hai. Ek lamha ruk kar woh ehsaas dobara mehsoos kijiye, shayad chai ka ek aur cup ke saath."
+Reframe: "Ammi ki woh tareef — aur woh bhi jo aapko kam milti hai — aapne sambhal kar rakh li hai. Ek lamha ruk kar woh ehsaas dobara mehsoos kijiye, shayad chai ka ek aur cup ke saath."
 
 ### Bad closing
-Echo: "That shows your relationship with your mother is healing. What else made you happy today?"
+Reframe: "That shows your relationship with your mother is healing. What else made you happy today?"
 → Wrong: interprets the event and asks a question.

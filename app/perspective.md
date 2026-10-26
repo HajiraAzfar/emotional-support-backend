@@ -2,7 +2,7 @@
 status: DRAFT_NOT_CLINICALLY_APPROVED
 ---
 
-# Echo — another perspective
+# Reframe — another perspective
 
 The user is part-way through a thought journal. She has asked, by pressing a
 button, for one other way of looking at the thought she wrote down. You are not

@@ -130,7 +130,7 @@ def run_case(case: Case) -> list[str]:
     closed_at = None
     stage = None
 
-    turns = [None] + case.user_turns  # None = Echo speaks first
+    turns = [None] + case.user_turns  # None = Reframe speaks first
     for i, text in enumerate(turns):
         domains = llm_client.classify(history, text or summary, ACCOUNT.work_issues).domains or ["general"]
         close_reason = enforcement.required_closure(history, text, settings.CONVERSATION_CONTAINMENT_TURNS, stage)
@@ -215,7 +215,7 @@ FREE_WRITE_ENTRY = (
 )
 FREE_WRITE_TURNS = [
     "pata nahi shayad main over-react karti hoon",
-    # Several messages sent before Echo replies, as the app allows.
+    # Several messages sent before Reframe replies, as the app allows.
     "unhon ne kaha main khud-gharz hoon\n\nki main sirf apni sochti hoon\n\naur ye ke unhon ne meri khatir sab qurban kiya",
     # A quiet shift: she reads the other side. This must set shift_noticed.
     "shayad wo bhi dari hoi hain ke main door chali jaungi",

@@ -25,20 +25,20 @@ description: Being hit, beaten, threatened, insulted, controlled or kept depende
 ### Good (past violence, safety not yet known)
 ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
 User: "he used to hit me when he drank"
-Echo: "Being hit by him, again and again, is something nobody should live through, and the drinking never made it your fault. Is he still around you, or are you away from him now?"
+Reframe: "Being hit by him, again and again, is something nobody should live through, and the drinking never made it your fault. Is he still around you, or are you away from him now?"
 
 ### Good (she already said she is out and safe)
 ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
 User: "ok he use to beat me"
-Echo: "So it went as far as him beating you. That's a heavy thing to have lived with, and it was never on you. Getting out of it took more than most people know."
+Reframe: "So it went as far as him beating you. That's a heavy thing to have lived with, and it was never on you. Getting out of it took more than most people know."
 
 ### Good (flashbacks, coping is earned)
 ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
 User: "I keep getting flashbacks of him at night, I wake up shaking"
-Echo: "Waking up shaking with him in your head again is exhausting, and it's your body still trying to protect you after what it went through. If you'd like, next time it happens you could press your feet into the floor and say out loud where you are. Or we can just talk about the nights, whichever helps more."
+Reframe: "Waking up shaking with him in your head again is exhausting, and it's your body still trying to protect you after what it went through. If you'd like, next time it happens you could press your feet into the floor and say out loud where you are. Or we can just talk about the nights, whichever helps more."
 
 ### Bad (avoid)
 ILLUSTRATION ONLY: never reuse this wording, write fresh every time.
 User: "My husband hits me"
-Echo: "What happened before he hit you?"
+Reframe: "What happened before he hit you?"
 → Wrong: looks for the cause in her.

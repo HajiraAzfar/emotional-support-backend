@@ -2,7 +2,7 @@ import re
 from pathlib import Path
 
 APP_DIR = Path(__file__).resolve().parent.parent
-_ECHO_LINE = re.compile(r'^Echo: "(.*)"\s*$', re.M)
+_ECHO_LINE = re.compile(r'^Reframe: "(.*)"\s*$', re.M)
 
 FOLDERS = ("clinical_context", "skills", "journal_types")
 # skills/ follows the Agent Skills layout: one folder per skill holding SKILL.md
@@ -68,7 +68,7 @@ def load(folder: str, name: str) -> str:
 
 
 def example_replies(folder: str, name: str) -> list[str]:
-    """The Echo lines of a file's examples: illustrations a reply must never copy."""
+    """The Reframe lines of a file's examples: illustrations a reply must never copy."""
     return _ECHO_LINE.findall(load(folder, name))
 
 

@@ -114,7 +114,7 @@ _INSTRUCTIONS = {
     ),
 }
 
-# Informal second person, which Echo must never use (checked by the eval set).
+# Informal second person, which Reframe must never use (checked by the eval set).
 TUM_WORDS = re.compile(r"\b(tum|tumhara|tumhari|tumhare|tumhe|tumhein|tumko|tumse|tumne|tujhe|tera|teri|tere)\b", re.I)
 
 

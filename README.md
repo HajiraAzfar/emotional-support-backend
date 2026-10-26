@@ -88,7 +88,7 @@ CONVERSATION_CONTAINMENT_TURNS=30
 
 ```
 app/
-├── base_instructions.md      Who Echo is, and how a conversation must end
+├── base_instructions.md      Who Reframe is, and how a conversation must end
 ├── capture_instructions.md   How a single capture question is worded
 ├── clinical_context/*.md     Guardrails per focus area — highest priority in a prompt
 ├── skills/<name>/SKILL.md    Response style per detected topic (Agent Skills format)
@@ -110,7 +110,7 @@ postman/                      Postman collection with saved example responses
 
 > Models and schemas are deliberately separate: `password_hash` exists in the `Account` model but appears in no response schema, so it cannot leak through the API.
 
-> Prompt content lives in Markdown and JSON, not in Python. The Clinical Advisor can review and revise what Echo says without reading code, and a change takes effect without a restart.
+> Prompt content lives in Markdown and JSON, not in Python. The Clinical Advisor can review and revise what Reframe says without reading code, and a change takes effect without a restart.
 
 ---
 
@@ -178,7 +178,7 @@ postman/                      Postman collection with saved example responses
 
 - The exposure journal shows a fixed scope notice, which must be acknowledged before the first value, to users whose focus areas include trauma (FR-JRN-007).
 - Free write and the thought trauma variant end with a grounding message for those users (FR-JRN-008).
-- **Free write is the extended session.** It runs longer before any closure condition fires (`content/conversation.json`: the same concern may be restated five times rather than three, three minimal replies rather than two, a containment failsafe of 60 turns rather than 30), and she can send several messages in the conversation before Echo answers, so a thought is never interrupted mid-way. Each message is still screened for crisis as it arrives.
+- **Free write is the extended session.** It runs longer before any closure condition fires (`content/conversation.json`: the same concern may be restated five times rather than three, three minimal replies rather than two, a containment failsafe of 60 turns rather than 30), and she can send several messages in the conversation before Reframe answers, so a thought is never interrupted mid-way. Each message is still screened for crisis as it arrives.
 
 ### Selection libraries (SRS 4.7)
 

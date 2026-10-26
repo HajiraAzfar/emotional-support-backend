@@ -22,7 +22,7 @@ Crisis: every free-text value is screened before it reaches any generated
 output. In a journal, a danger or emergency tier stops every AI call for that
 entry; the entry itself can still be completed (FR-CRIS-004, 006, 007). AI Chat
 keeps talking: the safety check (crisis.triage) runs before the skill is chosen,
-and a helplines card (the reply's own `card` field) goes under Echo's reply, never
+and a helplines card (the reply's own `card` field) goes under Reframe's reply, never
 instead of it and never in its text.
 """
 import json
@@ -279,7 +279,7 @@ def _screen(
 
     tier = crisis.assess(text, classification.risk_tier)
     result = crisis.record(db, account.id, entry, field, tier, lang)
-    # AI Chat puts no fixed text in the thread: the card goes under Echo's own reply.
+    # AI Chat puts no fixed text in the thread: the card goes under Reframe's own reply.
     if result and result.text and _journal_type(entry) != context_builder.CHAT:
         _add_message(db, entry, "ai", "crisis", result.text)
     return result, classification
@@ -468,7 +468,7 @@ def _reflect(
     recorded = _recorded(db, entry)
     summary = capture.summary(values, recorded, _user_terms(db, account))
 
-    # Language of the latest thing she wrote; capture answers count for Echo's first message.
+    # Language of the latest thing she wrote; capture answers count for Reframe's first message.
     user_texts = _free_text_answers(values, recorded) + [c for role, c in history if role == "user"]
     if text is not None:
         user_texts.append(text)
@@ -524,7 +524,7 @@ def _chat_reply(
         # The safety check chooses the skill, so a topic miss can't skip it.
         domains = [skill] + [d for d in domains if d != skill]
     entry.domains = domains
-    # Once she said she is safe, or Echo asked, the question is not asked again
+    # Once she said she is safe, or Reframe asked, the question is not asked again
     # (unless danger is now: tier 1 asks directly).
     settled = enforcement.safety_settled(history, text)
     # Content-free (FR-CRIS-013): which skill, triage and card this reply used.
@@ -693,7 +693,7 @@ def create_entry(
 ):
     journal_type = context_builder.normalise_journal_type(payload.journal_type)
     if journal_type == context_builder.CHAT:
-        # AI Chat: nothing to capture and no offer. She talks, Echo answers.
+        # AI Chat: nothing to capture and no offer. She talks, Reframe answers.
         entry = Entry(account_id=account.id, journal_type=journal_type, status="in_progress", conversation_status="active")
         db.add(entry)
         db.commit()
@@ -1152,7 +1152,7 @@ def another_perspective(
     """
     "Help me explore another perspective" (thought journal, FR-AIR-002): one
     suggestion, because she pressed the button. It is added to the thread as
-    Echo's, labelled by its kind, and is never written into any answer of hers —
+    Reframe's, labelled by its kind, and is never written into any answer of hers —
     the balanced thought stays something she types herself.
     """
     entry = _get_entry(db, entry_id, account)
@@ -1306,7 +1306,7 @@ def conversation(
         db.refresh(entry)
         return _state(db, entry, account)
 
-    # continue: Echo speaks first, referring to what was recorded (FR-AIR-002).
+    # continue: Reframe speaks first, referring to what was recorded (FR-AIR-002).
     summary = capture.summary(_values(db, entry, account), _recorded(db, entry), _user_terms(db, account))
     domains = llm_client.classify([], summary, account.work_issues).domains
     try:
@@ -1378,7 +1378,7 @@ def add_message(
 
     if payload.more:
         # FR-JRN-003 in the conversation: she is still writing. The message is
-        # stored and screened; Echo waits and answers all of it at once, because
+        # stored and screened; Reframe waits and answers all of it at once, because
         # interrupting someone mid-thought is the opposite of listening.
         db.commit()
         db.refresh(entry)

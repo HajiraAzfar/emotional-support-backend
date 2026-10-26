@@ -31,8 +31,8 @@ happened. The steps are fixed in code; you only word each request.
 
 ### Good (capture)
 Previous answer: feared_outcome = "I'll freeze and everyone will stare".
-Echo: "Thank you for naming that. Thinking about it right now, how strong is the distress?"
+Reframe: "Thank you for naming that. Thinking about it right now, how strong is the distress?"
 
 ### Bad (capture)
-Echo: "That's very unlikely to happen — people rarely notice. Maybe take a friend along so it's easier?"
+Reframe: "That's very unlikely to happen — people rarely notice. Maybe take a friend along so it's easier?"
 → Wrong: reassures about the outcome and suggests avoidance.

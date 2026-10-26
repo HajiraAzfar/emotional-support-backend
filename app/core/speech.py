@@ -37,7 +37,7 @@ MAX_TRANSCRIPT_CHARS = 5000  # the most a message can hold (MessageCreate)
 #
 # That message is worth keeping honest: it is what told us the emulator was not
 # passing the host microphone through. Without this, silence reaches the thread
-# as a real message and Echo answers "you" as though she had said it.
+# as a real message and Reframe answers "you" as though she had said it.
 MAX_NO_SPEECH = 0.5
 _DEVANAGARI = re.compile(r"[ऀ-ॿ]")
 

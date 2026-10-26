@@ -264,7 +264,7 @@ with patch.object(lc, "_get_client", return_value=fake):
     j = post(u + "/messages", {"content": "He beats me"})
     check(last_ai(j)["card"] == "prominent", "present violence: the same card again, prominent")
 
-    # She says she is safe before Echo asks: no safety question on any later turn.
+    # She says she is safe before Reframe asks: no safety question on any later turn.
     model.update(safety=safety("physical_violence", "past"), replies=["Leaving took real strength. Are you safe now?"])
     u = f"/entries/{post('/entries', {'journal_type': 'chat'})['id']}"
     j = post(u + "/messages", {"content": "I am safe now, I left him last year"})
@@ -400,7 +400,7 @@ with patch.object(lc, "_get_client", return_value=fake):
     check(j["conversation_status"] == "active", "still exploring while she is stuck")
     model["shift"] = True
     j = post(u + "/messages", {"content": "haan shayad woh bhi pareshan the, sirf mera nahi socha"})
-    check(j["conversation_status"] == "active", "she moved: Echo consolidates first, session not cut off")
+    check(j["conversation_status"] == "active", "she moved: Reframe consolidates first, session not cut off")
     e = S().get(Entry, uuid.UUID(u.split("/")[-1]))
     check(e.conversation_stage == "confirming", "entry marked as confirming the shift")
     model["shift"] = False
@@ -435,7 +435,7 @@ with patch.object(lc, "_get_client", return_value=fake):
     check(j["messages"][-1]["role"] == "user" and "Reflection" not in calls, "a second message also waits")
 
     j = post(ue + "/messages", {"content": "ab bata sakti hoon"})
-    check(j["messages"][-1]["role"] == "ai" and "Reflection" in calls, "then Echo answers all of it at once")
+    check(j["messages"][-1]["role"] == "ai" and "Reflection" in calls, "then Reframe answers all of it at once")
     sent = [m for m in j["messages"] if m["role"] == "user" and m["kind"] == "chat"]
     check(len(sent) == 3, f"all three of her messages are in the thread ({len(sent)})")
 
@@ -1645,7 +1645,7 @@ check(c.patch(u + "/captures/revised_thought", json={"value": "mera nahi hai"}).
       "someone else" + chr(39) + "s entry is not there to be revised")
 app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
 
-# Once Echo has read the answers and replied to them, they are no longer open:
+# Once Reframe has read the answers and replied to them, they are no longer open:
 # the transcript would otherwise describe something she never said.
 u2, j2, _ = walk_thought(TJ)
 j2 = post(u2 + "/conversation", {"choice": "stop"})
@@ -1655,7 +1655,7 @@ check(c.patch(u2 + "/captures/situation", json={"value": "kuch aur"}).status_cod
 with S() as w:
     row = w.get(Entry, uuid.UUID(u2.split("/")[-1])); row.conversation_status = "active"; w.commit()
 check(c.patch(u2 + "/captures/situation", json={"value": "kuch aur phir"}).status_code == 409,
-      "but once Echo has replied to her answers, they are not rewritten underneath it")
+      "but once Reframe has replied to her answers, they are not rewritten underneath it")
 
 # What the two ratings add up to in Insights. Its own account, so the averages
 # are of these three entries and nothing else in the suite.
@@ -1713,7 +1713,7 @@ with patch.object(lc, "_get_client", return_value=fake3):
     j = r.json()
     offered = [m for m in j["messages"] if m["kind"] == "perspective"]
     check(len(offered) == 1 and offered[0]["role"] == "ai",
-          "it arrives as Echo's, under its own kind, so the app can label it")
+          "it arrives as Reframe's, under its own kind, so the app can label it")
     check(all(m["kind"] != "capture_answer" or "busy ho" not in m["content"] for m in j["messages"]),
           "and is never written into an answer of hers")
     with S() as w:
