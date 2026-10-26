@@ -23,10 +23,6 @@ class DistressBaselineRequest(BaseModel):
     value: int = Field(ge=0, le=10)
 
 
-class GoalRequest(BaseModel):
-    weekly_goal: int = Field(ge=2, le=7)
-
-
 class NameRequest(BaseModel):
     # Empty or missing clears it: the greeting goes back to having no name.
     name: str | None = Field(default=None, max_length=40)
@@ -39,7 +35,6 @@ class OnboardingStatusResponse(BaseModel):
     work_issues: list[str] | None = None
     life_vision: str | None = None
     distress_baseline: int | None
-    weekly_goal: int
     current_consent_version: str
     elevated_distress: bool = False
     preferred_name: str | None = None

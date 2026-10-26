@@ -1,9 +1,10 @@
 """
-The check-in reports as PDFs: a day, a week or a month, drawn from exactly
-what checkin_reports.build() returns.
+The reports as PDFs: a day, a week or a month of the four journals, drawn
+from exactly what checkin_reports.build() returns.
 
-Conclusions come first, then the charts and tables they were read from, then
-her own words, then where to find support. A section with nothing in it is
+Conclusions come first, then the check-ins' charts and tables, then the
+Saving, Thought and Exposure Journals, then where to find support. Her own
+words sit with the journal they came from. A section with nothing in it is
 left out, and a chart is drawn only when it has something to show. The
 brand's fonts, colours and the escaping of her words come from pdf_report.
 """
@@ -428,6 +429,90 @@ def _period(report: dict, s, width: float) -> list:
     return out
 
 
+# ---------- the other three journals ----------
+
+def _excerpts(rows: list[tuple[str, str]], s, width: float):
+    rows = [(day, text) for day, text in rows if text]
+    return _table([[_day_month(day), text] for day, text in rows], s, [width * 0.16, width * 0.84],
+                  header=False) if rows else None
+
+
+def _quoted(text) -> str | None:
+    return f"“{text}”" if text else None
+
+
+def _reframe(e: dict) -> str | None:
+    """The first thought, how she put it after, and how much she believed each."""
+    parts = [_quoted(e["automatic_thought"])]
+    if e["balanced_thought"]:
+        parts.append(f"→ {_quoted(e['balanced_thought'])}")
+    if e["belief_before"] is not None and e["belief_after"] is not None:
+        parts.append(f"(belief {e['belief_before']}% → {e['belief_after']}%)")
+    return " ".join(p for p in parts if p) or None
+
+
+def _faced(e: dict) -> str | None:
+    parts = [e["step"], f"Feared: {e['feared_outcome']}" if e["feared_outcome"] else None,
+             f"What happened: {e['what_happened']}" if e["what_happened"] else None,
+             f"Learned: {e['learning']}" if e["learning"] else None]
+    return " · ".join(p for p in parts if p) or None
+
+
+def _number(value, unit: str = "") -> str | None:
+    return None if value is None else f"{value:g}{unit}"
+
+
+def _labelled(label: str, flowable, s) -> list:
+    """A small heading over a table; nothing when there is no table."""
+    if flowable is None:
+        return []
+    return [Spacer(1, 8), Paragraph(f"<font name='Inter-SemiBold'>{label}</font>", s["cell"]), Spacer(1, 2), flowable]
+
+
+def _journals(report: dict, s, width: float) -> list:
+    """The Saving, Thought and Exposure Journals: their numbers, what came up most, and her words."""
+    journals = report["journals"]
+    out = []
+    saved = journals.get("savoring")
+    if saved:
+        out += _section("Saving Journal", [
+            _pairs([("Good moments", saved["entries_total"]),
+                    ("Days with one", f"{saved['days_with_entries']} of {saved['adherence']['days_in_period']}"),
+                    ("Mood after, on average", None if saved["avg_mood_lift"] is None
+                     else f"{saved['avg_mood_lift']:+g}")], s, width),
+            *_labelled("Feelings you named", _counts(saved["top_emotions"], "Moments", "count", s, width), s),
+            *_labelled("In your own words", _excerpts(
+                [(e["date"], e["what_happened"] or e["souvenir_line"]) for e in saved.get("excerpts", [])], s, width), s),
+        ], s)
+    thought = journals.get("thought")
+    if thought:
+        out += _section("Thought Journal", [
+            _pairs([("Records finished", thought["completed"]),
+                    ("Belief eased, on average", _number(thought["avg_belief_drop"], " points")),
+                    ("Feelings eased, on average", _number(thought["avg_emotion_drop"], " points"))], s, width),
+            *_labelled("Thinking patterns you noticed",
+                       _counts(thought["top_thinking_patterns"], "Records", "count", s, width), s),
+            *_labelled("In your own words",
+                       _excerpts([(e["local_date"], _reframe(e)) for e in thought.get("excerpts", [])], s, width), s),
+        ], s, note="Averages show once five records have ratings.")
+    faced = journals.get("exposure")
+    if faced:
+        p, a = faced["predicted_vs_actual"], faced["anxiety_predicted_peak_end"]
+        out += _section("Exposure Journal", [
+            _pairs([("Exposures done", faced["done"]),
+                    ("Done in part", faced["partial"] or None),
+                    ("Set aside", faced["skipped"] or None),
+                    ("Steps completed", faced["steps_completed"]),
+                    ("Feared it was likely, on average", _number(p["predicted_likelihood"], "%")),
+                    ("It happened", _number(p["outcome_rate"], "% of the time")),
+                    ("Anxiety: expected, peak, end", " · ".join(_number(a[k]) or "—" for k in ("predicted", "peak", "end"))
+                     if a["peak"] is not None else None)], s, width),
+            *_labelled("In your own words",
+                       _excerpts([(e["local_date"], _faced(e)) for e in faced.get("excerpts", [])], s, width), s),
+        ], s, note="Averages show once there are enough exposures with ratings.")
+    return out
+
+
 # ---------- the document ----------
 
 def render(report: dict, *, name: str | None, made_on: date) -> bytes:
@@ -437,12 +522,12 @@ def render(report: dict, *, name: str | None, made_on: date) -> bytes:
     buffer = BytesIO()
     doc = SimpleDocTemplate(
         buffer, pagesize=A4, leftMargin=20 * mm, rightMargin=20 * mm, topMargin=18 * mm,
-        bottomMargin=18 * mm, title=f"Mind Doc check-in report, {report['title']}", author="Mind Doc",
+        bottomMargin=18 * mm, title=f"Mind Doc report, {report['title']}", author="Mind Doc",
     )
     width = doc.width
 
     story: list = [Paragraph(TITLES[report["kind"]], s["title"])]
-    meta = [f"Check-in report · {escape(report['title'])}", f"Made on {made_on.day} {made_on.strftime('%b %Y')}"]
+    meta = [f"Your journals · {escape(report['title'])}", f"Made on {made_on.day} {made_on.strftime('%b %Y')}"]
     if name:
         meta.insert(0, f"For {escape(name)}")
     story.append(Paragraph("<br/>".join(meta), s["small"]))
@@ -451,14 +536,16 @@ def render(report: dict, *, name: str | None, made_on: date) -> bytes:
     story.append(Paragraph("What stood out", s["h2"]))
     story += [Paragraph(escape(line), bullet, bulletText="•") for line in report["conclusions"]]
 
-    story += _daily(report, s, width) if report["kind"] == reports.DAILY else _period(report, s, width)
+    if report["check_ins"]:
+        story += _daily(report, s, width) if report["kind"] == reports.DAILY else _period(report, s, width)
+    story += _journals(report, s, width)
     story += _support(s, width)
 
     def footer(canvas, document):
         canvas.saveState()
         canvas.setFont("Inter", 8)
         canvas.setFillColor(FAINT)
-        canvas.drawString(document.leftMargin, 10 * mm, "Mind Doc · a record of your own check-ins")
+        canvas.drawString(document.leftMargin, 10 * mm, "Mind Doc · a record of your own journals")
         canvas.drawRightString(document.leftMargin + document.width, 10 * mm, f"Page {document.page}")
         canvas.restoreState()
 

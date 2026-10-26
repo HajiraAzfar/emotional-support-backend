@@ -6,13 +6,14 @@ badges she has become eligible for, and it saves the line she chooses to carry
 into next week. Both are hers, both are deterministic, and neither is anything
 the model decided.
 """
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
-from app.core import badges, checkin_pdf, checkin_reports, insights, narrative, pdf_report, questionnaire, weekly
+from app.core import (badges, checkin_pdf, checkin_reports, insights, journal_events, narrative, pdf_report,
+                      questionnaire, slots, weekly)
 from app.core.database import get_db
 from app.core.dependencies import get_current_user
 from app.models.account import Account
@@ -24,6 +25,8 @@ router = APIRouter(prefix="/insights", tags=["insights"])
 # Minutes east of UTC, as the device reports them (Pakistan is +300). Anything
 # beyond real-world offsets is a client bug, not a timezone.
 TZ_OFFSET_MIN, TZ_OFFSET_MAX = -840, 840
+# As the journals' own heatmaps: a year at most, 12 weeks unless asked.
+MAX_SPAN, HEATMAP_DAYS = timedelta(days=371), 12 * 7
 
 
 @router.get("")
@@ -43,7 +46,24 @@ def get_insights(
         for term in db.query(UserTerm).filter(UserTerm.account_id == account.id).all()
     }
     # Days are hers, not the server's: an entry at 1am is that day's entry.
-    return insights.build(db, account.id, period, terms, tz_offset=tz_offset, weekly_goal=account.weekly_goal)
+    return insights.build(db, account.id, period, terms, tz_offset=tz_offset)
+
+@router.get("/heatmap")
+def get_heatmap(
+    start: date | None = Query(None, alias="from"),
+    end: date | None = Query(None, alias="to"),
+    tz_offset: int = Query(0, ge=TZ_OFFSET_MIN, le=TZ_OFFSET_MAX),
+    db: Session = Depends(get_db),
+    account: Account = Depends(get_current_user),
+):
+    """The four journals in one heatmap: a day is as dark as the number of journals used on it."""
+    today = slots.local_now(tz_offset).date()
+    end = end or today
+    start = start or end - timedelta(days=HEATMAP_DAYS - 1)
+    if start > end or end - start > MAX_SPAN:
+        raise HTTPException(status_code=422, detail="from must be before to, and at most a year apart")
+    return journal_events.heatmap(db, account.id, start, end, today)
+
 
 @router.get("/report.pdf")
 def get_report_pdf(
@@ -55,8 +75,7 @@ def get_report_pdf(
     """Phase B: the same period's insights, as a PDF to keep or share."""
     if period not in insights.PERIODS:
         raise HTTPException(status_code=422, detail=f"Period must be one of: {', '.join(insights.PERIODS)}")
-    data = insights.build(db, account.id, period, _terms(db, account), tz_offset=tz_offset,
-                          weekly_goal=account.weekly_goal)
+    data = insights.build(db, account.id, period, _terms(db, account), tz_offset=tz_offset)
     today = insights.local_date(datetime.utcnow(), tz_offset)
     pdf = pdf_report.render(data, name=account.preferred_name, made_on=today)
     return Response(
@@ -76,7 +95,10 @@ def get_checkin_reports(
     db: Session = Depends(get_db),
     account: Account = Depends(get_current_user),
 ):
-    """The check-in reports she can open: finished days, weeks and months, newest first."""
+    """
+    The reports she can open: finished days, weeks and months, newest first.
+    The path says check-ins for the app's sake; a report holds all four journals.
+    """
     return checkin_reports.listing(db, account.id, tz_offset)
 
 
@@ -88,7 +110,7 @@ def get_checkin_report_pdf(
     db: Session = Depends(get_db),
     account: Account = Depends(get_current_user),
 ):
-    """One day's, week's or month's check-ins as a PDF, once that period is over on her clock."""
+    """One day, week or month of her four journals as a PDF, once that period is over on her clock."""
     if kind not in checkin_reports.KINDS:
         raise HTTPException(status_code=422, detail=f"Kind must be one of: {', '.join(checkin_reports.KINDS)}")
     try:
@@ -99,7 +121,7 @@ def get_checkin_report_pdf(
         raise HTTPException(status_code=409,
                             detail=f"This report is ready once the {checkin_reports.NOUNS[kind]} is over.")
     except checkin_reports.Empty:
-        raise HTTPException(status_code=404, detail="No check-ins were finished in this period.")
+        raise HTTPException(status_code=404, detail="Nothing was finished in your journals in this period.")
     today = insights.local_date(datetime.utcnow(), tz_offset)
     pdf = checkin_pdf.render(report, name=account.preferred_name, made_on=today)
     return Response(

@@ -679,7 +679,7 @@ st = j["streak"]
 check(st["current"] == 3, f"three days in a row is a streak of 3 (got {st['current']})")
 check(st["longest"] >= 3, f"longest is at least as long as the current one ({st['longest']})")
 check(st["today"] is True, "today counts as written")
-check(st["weekly_goal"] == 3, f"her weekly goal comes back with it ({st['weekly_goal']})")
+check("weekly_goal" not in st, "no weekly goal: onboarding no longer asks for one")
 check(st["days_this_week"] >= 1, "this week's days are counted")
 
 # a gap of one whole day breaks it
@@ -2063,8 +2063,8 @@ for report in (day, week, month):
 
 with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 24, 9, 0)):
     listed = c.get("/insights/check-ins/reports", params={"tz_offset": 300}).json()
-    check(listed["latest_daily"]["start"] == "2026-10-23" and listed["latest_daily"]["check_ins"] == 1,
-          "until today is over, yesterday's report leads")
+    check(listed["latest_daily"]["start"] == "2026-10-23" and listed["latest_daily"]["entries"] == 1,
+          "until today is over, yesterday's report leads; a check-in from before the slots is not counted")
     check([r["start"] for r in listed["daily"]][:2] == ["2026-10-23", "2026-10-22"] and listed["weekly"] == []
           and listed["monthly"] == [], "only finished periods are listed: this week and month are not over yet")
     check(c.get("/insights/check-ins/report.pdf", params={"kind": "daily", "start": "2026-10-24", "tz_offset": 300}
@@ -2076,8 +2076,9 @@ with patch("app.core.slots.local_now", return_value=datetime(2026, 10, 24, 9, 0)
           "a finished day downloads as a PDF that nothing caches")
 with patch("app.core.slots.local_now", return_value=datetime(2026, 11, 2, 9, 0)):
     listed = c.get("/insights/check-ins/reports", params={"tz_offset": 300}).json()
-    check([r["start"] for r in listed["weekly"]] == ["2026-10-19"] and [r["start"] for r in listed["monthly"]]
-          == ["2026-10-01"], "once over, the week and the month are listed too")
+    # Her other journals, written earlier in this run, add their own weeks.
+    check("2026-10-19" in [r["start"] for r in listed["weekly"]] and "2026-10-01" in [r["start"] for r in listed["monthly"]],
+          "once over, the week and the month are listed too")
 
 print("--- the Saving Journal: moments, three a day, today or yesterday (core/savoring.py)")
 from app.core import savoring as SV, savoring_report as SR, journal_events as JE
@@ -2270,7 +2271,7 @@ check(section["section"] == "D" and section["entries_total"] == 8 and section["a
       f"section D: counts and adherence, no streak, no words without consent: {section}")
 check(SR.savoring_section(S(), saver_id, ("2026-10-01", "2026-10-31"), {"include_excerpts": True})["excerpts"],
       "her words only with consent")
-events = JE.events(S(), saver_id, D(1), D(31))
+events = [e for e in JE.events(S(), saver_id, D(1), D(31)) if e["module"] != "check_in"]
 check(len(events) == 8 and {e["module"] for e in events} == {"savoring"} and any(e["mood_signal"] == 4 for e in events),
       "every moment is a journal_events row, its mood signal the lift")
 
@@ -2678,6 +2679,74 @@ w = S(); delete_account(w, w.get(Account, outsider_id))
 check(S().query(ExposureLadder).filter(ExposureLadder.account_id == outsider_id).count() == 0
       and S().query(ExposureLadderItem).filter(ExposureLadderItem.description == "A busy shop").count() == 0,
       "deleting an account takes its ladders and their steps with it")
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
+
+print("--- the four journals in one heatmap (core/journal_events.py)")
+FAR = (datetime(2000, 1, 1).date(), datetime(2100, 1, 1).date())
+s = S()
+four = Account(email="four@x.com"); s.add(four); s.commit(); four_id = four.id
+# One finished entry from each of the other journals, moved over with everything recorded in it.
+for source, owner in ((SR.journal_events, saver_id), (TR.journal_events, thinker_id), (ER.journal_events, facer_id)):
+    s.get(Entry, uuid.UUID(source(S(), owner, *FAR)[0]["entry_id"])).account_id = four_id
+s.commit()
+moved = {e["module"]: e["local_date"] for e in JE.events(S(), four_id, *FAR)}
+check(set(moved) == {"savoring", "thought", "exposure"}, f"each journal's finished entries are events: {moved}")
+busy = datetime.fromisoformat(moved["thought"])
+for slot, hour in (("morning", 4), ("evening", 15)):  # 09:00 and 20:00 in Karachi
+    s.add(Entry(account_id=four_id, journal_type="check_in", status="completed", slot=slot, local_date=busy.date(),
+                tz_offset=300, completed_at=busy.replace(hour=hour)))
+# A check-in from before the slots: no local_date; 20:00 UTC is 01:00 the next day in Karachi.
+s.add(Entry(account_id=four_id, journal_type="check_in", status="completed", tz_offset=300,
+            completed_at=datetime(2026, 9, 10, 20, 0)))
+s.add(Entry(account_id=four_id, journal_type="check_in", status="in_progress", local_date=busy.date()))
+s.commit()
+today = max(datetime.fromisoformat(d) for d in moved.values()).date()
+hm = JE.heatmap(S(), four_id, datetime(2026, 9, 1).date(), today, today)
+by_day = {d["date"]: d for d in hm["days"]}
+check(by_day[moved["thought"]]["journals"].get("check_in") == 2 and by_day[moved["thought"]]["journals"]["thought"] == 1,
+      f"a day says what each journal had, unfinished check-ins left out: {by_day[moved['thought']]}")
+check(all(d["points"] == len(d["journals"]) and d["level"] == min(d["points"], 3) for d in hm["days"]),
+      "a day's points are the journals used on it, not the entries: three check-ins make one")
+check(by_day["2026-09-11"]["journals"] == {"check_in": 1} and by_day["2026-09-10"]["points"] == 0,
+      "a check-in from before the slots counts on her own day")
+check(hm["streak"]["total_days"] == len({*moved.values(), "2026-09-11"}), f"the streak counts a day with any journal: {hm['streak']}")
+app.dependency_overrides[get_current_user] = lambda: S().get(Account, four_id)
+with patch("app.core.slots.local_now", return_value=datetime(today.year, today.month, today.day, 20, 0)):
+    route = c.get("/insights/heatmap", params={"tz_offset": 300}).json()
+check(len(route["days"]) == 84 and route["days"][-1]["date"] == today.isoformat() and "journals" in route["days"][0],
+      "the route gives twelve weeks up to today by default")
+check(c.get("/insights/heatmap", params={"from": "2025-01-01", "to": "2026-10-28"}).status_code == 422,
+      "and at most a year")
+
+print("--- one report for the four journals: a day, a week, a month (core/checkin_reports.py)")
+later = datetime(2026, 12, 2, 5, 0)
+both = CR.build(S(), four_id, "daily", busy.date(), {}, 300, now_utc=later)
+check(both["check_ins"] == 2 and set(both["journals"]) == {"thought"} and both["slots"]
+      and any(line.startswith("You finished 1 thought record") for line in both["conclusions"]),
+      f"a day with check-ins and a thought record has both: {both['conclusions']}")
+saved_day = CR.build(S(), four_id, "daily", datetime.fromisoformat(moved["savoring"]).date(), {}, 300, now_utc=later)
+check(saved_day["check_ins"] == 0 and "slots" not in saved_day and set(saved_day["journals"]) == {"savoring"}
+      and saved_day["conclusions"] == ["You saved 1 good moment in the Saving Journal."],
+      f"a day with no check-in still has a report: {saved_day['conclusions']}")
+october = CR.build(S(), four_id, "monthly", datetime(2026, 10, 1).date(), {}, 300, now_utc=later)
+november = CR.build(S(), four_id, "monthly", datetime(2026, 11, 1).date(), {}, 300, now_utc=later)
+check(set(october["journals"]) == {"savoring", "thought"} and set(november["journals"]) == {"exposure"}
+      and any(line.startswith("You did 1 exposure") for line in november["conclusions"]),
+      "a month holds every journal that was used in it")
+try:
+    CR.build(S(), four_id, "daily", datetime(2026, 10, 2).date(), {}, 300, now_utc=later)
+    empty = False
+except CR.Empty:
+    empty = True
+check(empty, "a day with nothing in any journal has no report")
+for report in (both, saved_day, october, november):
+    check(CP.render(report, name=None, made_on=later.date()).startswith(b"%PDF"),
+          f"the {report['kind']} report of {report['start']} draws with its journals")
+listed = CR.listing(S(), four_id, 300, now_utc=later)
+days_listed = {r["start"]: r["entries"] for r in listed["daily"]}
+check(days_listed[busy.date().isoformat()] == 3 and days_listed[moved["savoring"]] == 1
+      and "2026-09-11" not in days_listed and [r["start"] for r in listed["monthly"]][:2] == ["2026-11-01", "2026-10-01"],
+      f"every finished day, week and month with an entry in any journal is listed: {days_listed}")
 app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
 
 print(f"\nALL {ok} CHECKS PASSED")

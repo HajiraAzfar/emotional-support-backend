@@ -149,7 +149,7 @@ def _counts(entries, values, value_id: str | tuple[str, ...], library: str, user
 
 
 def build(db: Session, account_id, period: str, user_terms: dict, now: datetime | None = None,
-          tz_offset: int = 0, weekly_goal: int | None = None) -> dict:
+          tz_offset: int = 0) -> dict:
     """Every view for one period, in one pass over the entries."""
     now = now or datetime.utcnow()
     window = window_for(period, now)
@@ -260,7 +260,7 @@ def build(db: Session, account_id, period: str, user_terms: dict, now: datetime 
         "exposure": _exposure(entries, values, tz_offset),
         "calendar": {"days": days},
         # FR-INS-015 with module 4: days in a row, counted over her whole history.
-        "streak": _streak(db, account_id, tz_offset, now, weekly_goal),
+        "streak": _streak(db, account_id, tz_offset, now),
         # FR-INS-019: the weekly PHQ-9 and GAD-7 (asked inside the evening
         # check-in, so never offered here), as lines with no numbers on them.
         "questionnaire": {
@@ -370,7 +370,7 @@ def _writing_times(entries, tz_offset: int) -> list[dict]:
     return [{"part": code, "label": label, "count": counts[code]} for code, label, _, _ in DAY_PARTS]
 
 
-def _streak(db: Session, account_id, tz_offset: int, now: datetime, weekly_goal: int | None) -> dict:
+def _streak(db: Session, account_id, tz_offset: int, now: datetime) -> dict:
     """
     Days in a row with at least one completed entry, counted in her own
     timezone and over her whole history — a streak that reset every time she
@@ -405,7 +405,7 @@ def _streak(db: Session, account_id, tz_offset: int, now: datetime, weekly_goal:
                     break
                 current += 1
 
-    # The week she is in now, Monday to Sunday, against the goal she set.
+    # The week she is in now, Monday to Sunday.
     week_start = today - timedelta(days=today.weekday())
     this_week = sum(1 for day in days if day >= week_start)
     # Entries, not days: the ring counts everything she has ever finished.
@@ -418,7 +418,6 @@ def _streak(db: Session, account_id, tz_offset: int, now: datetime, weekly_goal:
         "today": bool(days) and days[-1] == today,
         "week_start": week_start.isoformat(),
         "days_this_week": this_week,
-        "weekly_goal": weekly_goal,
         "total_entries": len(rows),
         "entries_this_month": this_month,
     }

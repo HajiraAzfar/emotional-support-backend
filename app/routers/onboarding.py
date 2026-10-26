@@ -14,7 +14,6 @@ from app.schemas.onboarding import (
     ConsentRequest,
     DistressBaselineRequest,
     FocusAreasRequest,
-    GoalRequest,
     LifeVisionRequest,
     NameRequest,
     OnboardingStatusResponse,
@@ -22,8 +21,6 @@ from app.schemas.onboarding import (
 )
 
 router = APIRouter(prefix="/onboarding", tags=["onboarding"])
-
-ALLOWED_GOALS = {2, 3, 5, 7}
 
 _CONTENT_DIR = Path(__file__).resolve().parent.parent / "content"
 
@@ -50,7 +47,6 @@ def status_(
         "work_issues": account.work_issues or [],
         "life_vision": account.life_vision,
         "distress_baseline": account.distress_baseline,
-        "weekly_goal": account.weekly_goal,
         "current_consent_version": settings.CONSENT_VERSION,
         "elevated_distress": (
             account.distress_baseline is not None
@@ -149,24 +145,6 @@ def distress_baseline(
 ):
     account.distress_baseline = payload.value
     account.distress_baseline_at = datetime.utcnow()
-    db.commit()
-    db.refresh(account)
-    return status_(account=account, db=db)
-
-
-@router.put("/goal", response_model=OnboardingStatusResponse)
-def goal(
-    payload: GoalRequest,
-    account: Account = Depends(get_current_user),
-    db: Session = Depends(get_db),
-):
-    if payload.weekly_goal not in ALLOWED_GOALS:
-        raise HTTPException(
-            status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
-            detail="Weekly goal must be 2, 3, 5, or 7.",
-        )
-
-    account.weekly_goal = payload.weekly_goal
     db.commit()
     db.refresh(account)
     return status_(account=account, db=db)

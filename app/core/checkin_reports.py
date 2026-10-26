@@ -1,6 +1,8 @@
 """
-Check-in reports: one finished day, week (Monday to Sunday) or month of the
-three-a-day check-ins, ready for checkin_pdf.py to draw.
+The reports: one finished day, week (Monday to Sunday) or month of all four
+journals, ready for checkin_pdf.py to draw — the three-a-day check-ins first,
+then the Saving, Thought and Exposure Journals as the combined clinical
+report's sections (savoring_section, thought_section, exposure_section).
 
 Only finished slot check-ins count. A period is reported once it is over on
 her clock: a day at 05:00 the next morning, when its evening closes; a week on
@@ -26,7 +28,8 @@ from pathlib import Path
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core import assessments, capture, insights, slots
+from app.core import (assessments, capture, exposure_report, insights, journal_events, savoring_report, slots,
+                      thought_report)
 from app.models.entry import Entry
 
 TEXT = json.loads(
@@ -59,6 +62,12 @@ QUOTED = {WEEKLY: 10, MONTHLY: 15}
 QUESTIONS_LOOKBACK = {WEEKLY: timedelta(days=28), MONTHLY: timedelta(days=62)}
 # A coping answer that is not a way of coping.
 NO_COPING = "nothing"
+# The other three journals, by their journal_events module name. Her words are
+# included, as the check-in part quotes hers: the report is her own.
+SECTIONS = (("savoring", savoring_report.savoring_section), ("thought", thought_report.thought_section),
+            ("exposure", exposure_report.exposure_section))
+# What came up most is said once it came up at least this often.
+MIN_TOP = 2
 
 
 class NotReady(Exception):
@@ -140,6 +149,10 @@ def _join(items: list[str]) -> str:
 
 def _say(key: str, **values) -> str:
     return TEXT["conclusions"][key].format(**values)
+
+
+def _n(n: int, one: str, many: str) -> str:
+    return f"{n} {one if n == 1 else many}"
 
 
 def _checkins(db: Session, account_id, start: date, end: date) -> list[Entry]:
@@ -454,28 +467,77 @@ def _period_conclusions(kind: str, report: dict) -> list[str]:
     return out + (patterns or [_say("not_enough", period=noun)])
 
 
+# ---------- the other three journals ----------
+
+def _journals(db: Session, account_id, start: date, end: date) -> dict:
+    """The Saving, Thought and Exposure sections that have something in the period, by module."""
+    out = {}
+    for name, section in SECTIONS:
+        built = section(db, account_id, (start, end), {"include_excerpts": True})
+        if not built.get("empty"):
+            out[name] = built
+    return out
+
+
+def _journal_conclusions(journals: dict) -> list[str]:
+    """A few plain sentences per journal, each only when the numbers behind it are there."""
+    out = []
+    saved = journals.get("savoring")
+    if saved:
+        out.append(_say("saved", moments=_n(saved["entries_total"], "good moment", "good moments")))
+        if saved["avg_mood_lift"] is not None and saved["avg_mood_lift"] > 0:
+            out.append(_say("saved_lift", lift=f"{saved['avg_mood_lift']:g}"))
+        if saved["top_emotions"] and saved["top_emotions"][0]["count"] >= MIN_TOP:
+            out.append(_say("saved_feeling", feeling=saved["top_emotions"][0]["name"]))
+    thought = journals.get("thought")
+    if thought:
+        out.append(_say("thought_done", records=_n(thought["completed"], "thought record", "thought records")))
+        if thought["avg_belief_drop"] is not None and thought["avg_belief_drop"] > 0:
+            out.append(_say("thought_belief", drop=f"{thought['avg_belief_drop']:g}"))
+        traps = thought["top_thinking_patterns"]
+        if traps and traps[0]["count"] >= MIN_TOP:
+            out.append(_say("thought_trap", trap=traps[0]["name"]))
+        if thought["recurring_pattern"]:
+            out.append(thought["recurring_pattern"]["text"])
+    faced = journals.get("exposure")
+    if faced:
+        out.append(_say("exposure_done", exposures=_n(faced["done"], "exposure", "exposures")))
+        if faced["partial"]:
+            out.append(_say("exposure_partial", n=faced["partial"]))
+        p = faced["predicted_vs_actual"]
+        if p["predicted_likelihood"] is not None and p["outcome_rate"] is not None:
+            out.append(_say("exposure_prediction", predicted=f"{p['predicted_likelihood']:g}",
+                            happened=f"{p['outcome_rate']:g}"))
+        if faced["no_change_pattern"]:
+            out.append(faced["no_change_pattern"]["text"])
+    return out
+
+
 # ---------- what the app lists, and one report ----------
 
 def listing(db: Session, account_id, tz_offset: int, now_utc: datetime | None = None) -> dict:
     """
     The reports she can open: every finished day, week and month with at least
-    one finished check-in, newest first. `latest_daily` is the day before the
-    one she is in now — the report the app shows on top until today is over —
-    even when it had no check-in (check_ins is 0 then).
+    one finished entry in any of the four journals, newest first. `latest_daily`
+    is the day before the one she is in now — the report the app shows on top
+    until today is over — even when nothing was written (entries is 0 then).
     """
     moment = slots.local_now(tz_offset, now_utc)
-    counts = dict(
+    # Slot check-ins only, as the report reads them; a check-in from before the slots makes no report.
+    counts = Counter(dict(
         db.query(Entry.local_date, func.count(Entry.id))
         .filter(Entry.account_id == account_id, Entry.journal_type == "check_in", Entry.slot.isnot(None),
                 Entry.status == "completed")
         .group_by(Entry.local_date)
         .all()
-    )
+    ))
+    counts.update(date.fromisoformat(e["local_date"])
+                  for e in journal_events.events(db, account_id, date.min, moment.date()) if e["module"] != "check_in")
 
     def item(kind: str, start: date, n: int) -> dict:
         first, last = bounds(kind, start)
         return {"kind": kind, "start": first.isoformat(), "end": last.isoformat(),
-                "title": title(kind, first, last), "check_ins": n}
+                "title": title(kind, first, last), "entries": n}
 
     weeks, months = Counter(), Counter()
     for day, n in counts.items():
@@ -502,25 +564,29 @@ def build(db: Session, account_id, kind: str, start: date, terms: dict, tz_offse
     if not slots.day_over(end, slots.local_now(tz_offset, now_utc)):
         raise NotReady
     entries = _checkins(db, account_id, start, end)
-    if not entries:
+    journals = _journals(db, account_id, start, end)
+    if not entries and not journals:
         raise Empty
-    days = _days(entries, insights._values(db, entries))
     report = {"kind": kind, "start": start.isoformat(), "end": end.isoformat(),
-              "title": title(kind, start, end), "period": NOUNS[kind], "check_ins": len(entries)}
+              "title": title(kind, start, end), "period": NOUNS[kind], "check_ins": len(entries),
+              "journals": journals, "conclusions": []}
 
-    if kind == DAILY:
+    # The check-in part, only when there were check-ins: the other journals stand on their own.
+    if entries and kind == DAILY:
+        days = _days(entries, insights._values(db, entries))
         report.update(_daily(days[start], terms))
         report["conclusions"] = _day_conclusions(report)
-        return report
-
-    prev_start = _previous(kind, start)
-    prev_entries = _checkins(db, account_id, prev_start, bounds(kind, prev_start)[1])
-    report.update(_period(kind, start, end, days, _days(prev_entries, insights._values(db, prev_entries)), terms))
-    # The weekly questions, as stored (UTC), up to the moment the period closed.
-    until = slots.window(end, slots.EVENING)[1] - timedelta(minutes=tz_offset)
-    report["questions"] = {
-        name: assessments.trend(db, account_id, name, until - QUESTIONS_LOOKBACK[kind], until)["points"]
-        for name in (assessments.PHQ9, assessments.GAD7)
-    }
-    report["conclusions"] = _period_conclusions(kind, report)
+    elif entries:
+        days = _days(entries, insights._values(db, entries))
+        prev_start = _previous(kind, start)
+        prev_entries = _checkins(db, account_id, prev_start, bounds(kind, prev_start)[1])
+        report.update(_period(kind, start, end, days, _days(prev_entries, insights._values(db, prev_entries)), terms))
+        # The weekly questions, as stored (UTC), up to the moment the period closed.
+        until = slots.window(end, slots.EVENING)[1] - timedelta(minutes=tz_offset)
+        report["questions"] = {
+            name: assessments.trend(db, account_id, name, until - QUESTIONS_LOOKBACK[kind], until)["points"]
+            for name in (assessments.PHQ9, assessments.GAD7)
+        }
+        report["conclusions"] = _period_conclusions(kind, report)
+    report["conclusions"] += _journal_conclusions(journals)
     return report

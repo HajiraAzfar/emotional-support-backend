@@ -1,7 +1,7 @@
 {
   "_clinical_status": "DRAFT_NOT_CLINICALLY_APPROVED",
-  "_comment": "Wording of the check-in reports (core/checkin_reports.py, core/checkin_pdf.py). Each conclusion is a rule-based sentence that appears only when the numbers behind it are there; the thresholds are in checkin_reports.py. They describe what she recorded and never explain, predict or diagnose. {placeholders} are filled in by the code.",
-  "note": "This report is made from the check-ins you finished in Mind Doc this {period}, in your own ratings and words. It is not a clinical assessment, and nothing in it is a diagnosis.",
+  "_comment": "Wording of the reports: check-ins, Saving, Thought and Exposure Journals (core/checkin_reports.py, core/checkin_pdf.py). Each conclusion is a rule-based sentence that appears only when the numbers behind it are there; the thresholds are in checkin_reports.py. They describe what she recorded and never explain, predict or diagnose. {placeholders} are filled in by the code.",
+  "note": "This report is made from what you finished in your journals in Mind Doc this {period}: check-ins, good moments, thought records and exposures, in your own ratings and words. It is not a clinical assessment, and nothing in it is a diagnosis.",
   "closing": "These are patterns in what you wrote, not a diagnosis.",
   "support_title": "If you need support now",
   "questions_note": "Each dot is one week's answers, placed between the lowest and highest they could be: higher means your answers said \"more often\". No score is shown.",
@@ -37,6 +37,15 @@
     "mood_down_small": "Your mood was a little lower than the {period} before ({now} against {before} out of 5).",
     "mood_down": "Your mood was lower than the {period} before ({now} against {before} out of 5).",
     "stress_up": "Stress or worry was higher than the {period} before ({now}/10 against {before}/10).",
-    "stress_down": "Stress or worry was lower than the {period} before ({now}/10 against {before}/10)."
+    "stress_down": "Stress or worry was lower than the {period} before ({now}/10 against {before}/10).",
+    "saved": "You saved {moments} in the Saving Journal.",
+    "saved_lift": "Your mood tended to be higher after savoring (about +{lift} on average).",
+    "saved_feeling": "\"{feeling}\" was the feeling you named most in your good moments.",
+    "thought_done": "You finished {records} in the Thought Journal.",
+    "thought_belief": "On average, your belief in the first thought eased by {drop} points.",
+    "thought_trap": "\"{trap}\" was the thinking pattern you noticed most.",
+    "exposure_done": "You did {exposures} in the Exposure Journal.",
+    "exposure_partial": "{n} of them you did in part, and that counts too.",
+    "exposure_prediction": "You predicted what you feared was {predicted}% likely; it happened {happened}% of the time."
   }
 }

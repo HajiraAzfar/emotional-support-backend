@@ -18,7 +18,6 @@ class AccountResponse(BaseModel):
     id: uuid.UUID
     email: EmailStr
     verified: bool
-    weekly_goal: int
     interface_language: str
     preferred_name: str | None = None
     created_at: datetime

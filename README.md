@@ -121,7 +121,7 @@ postman/                      Postman collection with saved example responses
 | 1 | Authentication (account layer) | 4.2 | ✅ Complete | ✅ Complete |
 | 2 | Application lock (device layer) | 4.2 | — Not applicable | ✅ Complete |
 | 3 | Onboarding | 4.3 | ✅ Complete | ✅ Complete |
-| 4 | Dashboard and engagement | 4.4 | ✅ Streak, entry counts, weekly goal | ✅ Complete |
+| 4 | Dashboard and engagement | 4.4 | ✅ Streak, entry counts | ✅ Complete |
 | 5 | Entry engine | 4.5 | ✅ Complete except voice input | ✅ Complete except voice input |
 | 6 | Journal types | 4.6 | ✅ All five journals | ✅ All five journals |
 | 7 | Selection libraries | 4.7 | ✅ Complete | ✅ Complete |
@@ -150,7 +150,7 @@ postman/                      Postman collection with saved example responses
 ### Onboarding
 
 - Consent recorded with document version and timestamp; the current version is served so the client can detect a change.
-- Focus areas, work issues, life vision (160 characters), distress baseline (0–10) and weekly goal (2, 3, 5, 7).
+- Focus areas, work issues, life vision (160 characters), distress baseline (0–10). The weekly goal question was removed (2026-10-26).
 - `elevated_distress` computed from `ELEVATED_DISTRESS_THRESHOLD`, so the threshold is configuration rather than a release.
 - Status endpoint reporting what remains, so an interrupted sequence can resume.
 
@@ -209,7 +209,7 @@ postman/                      Postman collection with saved example responses
 
 - One period control — 7 days, 30 days, 3 months, all — applied to every view (FR-INS-001).
 - **Days are hers, not the server's.** The client sends its UTC offset and every date — chart points, the calendar, the streak — is grouped by her local day, so an entry written at 1am counts for that day.
-- **Streak**: days in a row with at least one completed entry, counted over her whole history, plus the longest so far and this week against the weekly goal she set. Missing today does not break it; missing a whole day does.
+- **Streak**: days in a row with at least one completed entry, counted over her whole history, plus the longest so far and how many days of this week had one. Missing today does not break it; missing a whole day does.
 - The calendar returns each day with the mood she recorded on it, and the streak carries her all-time entry count and this month's, so the client can draw the ring without a second request.
 - Mood and feeling-intensity series drawn as line charts (react-native-svg) with gridlines and the ends of the scale named; each point sits on the day it was recorded, so a gap in writing shows as a gap. Tapping a point opens that entry.
 - **Trends over time**, which is what the section is actually for: the weekly average mood, how often each thinking pattern and trigger came up week by week (the three most frequent, as lines), and how her entries were spread across the mood scale.
@@ -319,7 +319,6 @@ Authenticated endpoints require an `Authorization: Bearer <token>` header.
 | PUT | `/onboarding/work-issues` | Yes | Replace work issue selections |
 | POST | `/onboarding/life-vision` | Yes | Record life vision (max 160 characters) |
 | POST | `/onboarding/distress-baseline` | Yes | Record distress baseline |
-| PUT | `/onboarding/goal` | Yes | Set weekly entry goal |
 | GET | `/entries` | Yes | Entries, newest activity first; `status`, `q` (search), `since_days`, `limit` |
 | POST | `/entries` | Yes | Start an entry; `parent_entry_id` starts a further exposure cycle |
 | GET | `/entries/{id}` | Yes | One entry with its whole thread and the value being requested |

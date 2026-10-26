@@ -14,6 +14,8 @@ class Account(Base):
     email = Column(String(255), unique=True, nullable=False, index=True)
     password_hash = Column(String(255), nullable=True)
     verified = Column(Boolean, default=False, nullable=False)
+    # ponytail: no longer asked in onboarding or shown anywhere; the column stays
+    # so no migration is needed. Drop it with one if the table is ever cleaned up.
     weekly_goal = Column(Integer, default=3, nullable=False)
     # What the user would like to be called: the app's greeting and the PDF
     # report's cover. Optional, and never sent to the model.
