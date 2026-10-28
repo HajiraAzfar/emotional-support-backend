@@ -1390,11 +1390,16 @@ def add_message(
         else:
             outcome = _reflect(db, entry, account, history, text, classification.domains)
     except llm_client.LLMError:
-        # A blocked or failed reply to a disclosure must not read like a shrug.
-        disclosed = safety is not None and safety.harm_type in crisis.SKILL_FOR_HARM
-        _add_message(db, entry, "ai", "notice",
-                     crisis.pick(crisis.CONTENT["support_unavailable"], lang) if disclosed else REPLY_UNAVAILABLE,
-                     card=card)
+        # A blocked or failed reply to a disclosure or to risk must not read like a
+        # shrug. Azure's filter blocks replies to suicidal messages outright, so at
+        # tier 1 the fixed crisis content stands in, with the prominent card under it.
+        if safety is not None and safety.harm_type in crisis.SKILL_FOR_HARM:
+            fallback = crisis.pick(crisis.CONTENT["support_unavailable"], lang)
+        elif level == crisis.TIER1:
+            fallback = event.text if event and event.text else crisis.pick(crisis.CONTENT["danger"]["abbreviated"], lang)
+        else:
+            fallback = REPLY_UNAVAILABLE
+        _add_message(db, entry, "ai", "notice", fallback, card=card)
         db.commit()
         db.refresh(entry)
         return _state(db, entry, account, crisis_event=event)

@@ -101,7 +101,8 @@ settings.OPENAI_API_KEY = None
 print("--- lexical tiers")
 for text, want in [("aaj acha din tha", "clear"), ("honestly what's the point", "mild"), ("I want to kill myself", "danger"),
                    ("I'm going to kill myself tonight", "emergency"), ("took all the sleeping pills", "emergency"),
-                   ("dying to see this movie", "clear"), ("zindagi khatam, jeena nahi chahti", "danger"), ("mujhe ab jeene ka koi dil nahi karta", "danger"), ("aaj jeene ka maza aa gaya", "clear")]:
+                   ("dying to see this movie", "clear"), ("zindagi khatam, jeena nahi chahti", "danger"), ("mujhe ab jeene ka koi dil nahi karta", "danger"), ("aaj jeene ka maza aa gaya", "clear"),
+                   ("I was killing it at work but honestly I want to kill myself", "danger"), ("sab mere bagair behtar honge", "danger")]:
     check(assess_lexical(text) == want, f"{text!r} -> {want}")
 check(check_crisis("I want to kill myself") and not check_crisis("what's the point"), "check_crisis() unchanged for danger, false for mild")
 
@@ -287,6 +288,59 @@ with patch.object(lc, "_get_client", return_value=fake):
     check(last_ai(j)["content"] == "Model reply here." and last_ai(j)["card"] == "prominent", "chat: model-noticed risk keeps the reply, card turns prominent")
     check(j["conversation_status"] == "active" and post(u + "/messages", {"content": "ok"})["conversation_status"] == "active", "and the chat goes on")
     model.update(reflection_crisis=False)
+
+    # The reply call fails on a suicidal message (Azure's filter blocks it): fixed crisis
+    # content stands in, never the generic "couldn't reply", with the prominent card.
+    from app.core.crisis import CONTENT as CRISIS_CONTENT  # noqa: E402
+    from app.routers.entries import REPLY_UNAVAILABLE  # noqa: E402
+
+    def reply_fails(**kw):
+        if kw["text_format"] is lc.ChatReply:
+            raise lc.LLMError("blocked")
+        return parse(**kw)
+
+    fake.responses.parse.side_effect = reply_fails
+    model.update(risk="danger", safety=lc.Safety(harm_type="self_harm", timing="ongoing", danger_now="unclear", about="self",
+                                                 discloses=True, distress_now=False, asks_for_help=False))
+    u = f"/entries/{post('/entries', {'journal_type': 'chat'})['id']}"
+    j = post(u + "/messages", {"content": "everyone would be better off without me"})
+    danger_texts = {CRISIS_CONTENT["danger"][v]["english"] for v in ("full", "abbreviated")}
+    check(last_ai(j)["content"] in danger_texts and last_ai(j)["card"] == "prominent",
+          "reply fails at tier 1: fixed crisis content and the prominent card, not 'couldn't reply'")
+    model.update(risk="clear", safety=NO_HARM)
+    u = f"/entries/{post('/entries', {'journal_type': 'chat'})['id']}"
+    j = post(u + "/messages", {"content": "hi, long day"})
+    check(last_ai(j)["content"] == REPLY_UNAVAILABLE and last_ai(j)["card"] is None,
+          "reply fails with no risk: the plain notice, no card")
+    # What Azure did live on 27 Oct: the self-harm filter blocks the classifier AND the
+    # reply. The block alone reaches tier 1, and the fixed text follows her language.
+    import openai  # noqa: E402
+    fake.responses.parse.side_effect = openai.BadRequestError(
+        "blocked", response=SimpleNamespace(request=None, status_code=400, headers={}),
+        body={"code": "content_filter", "content_filters": [{"content_filter_results": {"self_harm": {"filtered": True}}}]})
+    u = f"/entries/{post('/entries', {'journal_type': 'chat'})['id']}"
+    j = post(u + "/messages", {"content": "bas aaj raat sab khatam"})
+    danger_ru = {CRISIS_CONTENT["danger"][v]["roman_urdu"] for v in ("full", "abbreviated")}
+    check(assess_lexical("bas aaj raat sab khatam") == "clear" and last_ai(j)["content"] in danger_ru
+          and last_ai(j)["card"] == "prominent",
+          "classifier and reply both filtered: the block alone gives the Roman Urdu crisis text and the prominent card")
+    fake.responses.parse.side_effect = parse
+    # "bagair" (27 Oct live): the classifier read "sab mere b(a/ag)hair behtar honge" as mild,
+    # no harm, and the rules missed this spelling. The rules alone must now reach tier 1,
+    # with the classifier saying mild and with Azure down altogether.
+    bagair = "sab mere bagair behtar honge"
+    model.update(risk="mild", safety=NO_HARM)
+    u = f"/entries/{post('/entries', {'journal_type': 'chat'})['id']}"
+    j = post(u + "/messages", {"content": bagair})
+    check(last_ai(j)["card"] == "prominent" and j["conversation_status"] == "active",
+          "'bagair' spelling, classifier says mild: the rules give tier 1, the prominent card, and the chat goes on")
+    fake.responses.parse.side_effect = lc.LLMError("down")
+    u = f"/entries/{post('/entries', {'journal_type': 'chat'})['id']}"
+    j = post(u + "/messages", {"content": bagair})
+    check(last_ai(j)["content"] in danger_ru and last_ai(j)["card"] == "prominent",
+          "'bagair' spelling, Azure down: the rules alone give the Roman Urdu crisis text and the prominent card")
+    fake.responses.parse.side_effect = parse
+    model.update(risk="clear")
 
 print("--- G: resume, list, delete")
 settings.OPENAI_API_KEY = None

@@ -41,7 +41,7 @@ def coach_mode(domains: list[str], work_issues: list[str] | None) -> bool:
 
 def _distress_label(baseline: int | None) -> str:
     if baseline is None:
-        return "not shared (assume moderate; be careful)"
+        return "not shared (don't assume either way; be gentle)"
     if baseline <= 3:
         return f"{baseline}/10 — low"
     if baseline <= 6:

@@ -432,6 +432,19 @@ def romanize(text: str) -> str | None:
     return roman or None
 
 
+def _window(system_prompt: str, history: list[tuple[str, str]]) -> tuple[str, list[tuple[str, str]]]:
+    """
+    The latest RESPONSE_HISTORY messages. A longer conversation says so, because a
+    model that can't see the start fills it in: asked about a detail from the
+    first messages, it answered as if none had been given.
+    """
+    if len(history) <= RESPONSE_HISTORY:
+        return system_prompt, history
+    return (system_prompt + "\n\n# Earlier messages\nThis conversation is longer than what you can see: only "
+            "its latest messages are shown. If they refer to something you can't see, say so and ask; never "
+            "guess what it was."), history[-RESPONSE_HISTORY:]
+
+
 def _mock_reflection(text: str | None) -> Reflection:
     ending = text is not None and text.strip().lower() in {"ok", "okay", "yeah", "idk", "bye", "stop"}
     if ending:
@@ -467,7 +480,8 @@ def generate_reflection(
     if settings.LLM_MOCK:
         return _mock_reflection(text)
 
-    items = _as_input(history[-RESPONSE_HISTORY:], text)
+    system_prompt, history = _window(system_prompt, history)
+    items = _as_input(history, text)
     if not items:
         items = [{"role": "user", "content": "(I've finished my entry and chose to talk it through.)"}]
     return _parse_reply(settings.OPENAI_RESPONSE_MODEL, system_prompt, items, Reflection)
@@ -485,7 +499,8 @@ def generate_chat_reply(
             response_text="(Mock) Acha, aur batayein. Kya chal raha hai?",
             referral_flag=False,
         )
-    items = _as_input(history[-RESPONSE_HISTORY:], text)
+    system_prompt, history = _window(system_prompt, history)
+    items = _as_input(history, text)
     model = settings.OPENAI_CHAT_MODEL or settings.OPENAI_RESPONSE_MODEL
     return _parse_reply(model, system_prompt, items, ChatReply)
 

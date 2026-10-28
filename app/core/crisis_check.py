@@ -33,7 +33,7 @@ CRISIS_PATTERNS = [
     r"\bab nahi jeena\b",
     r"\bkhud ko (nuqsan|nuqsaan|hurt|zakhmi)\b",
     r"\b(mujhe|main)\s+marna\s+(hai|chahti|chahta)\b",
-    r"\b(mere|meray)\s+(baghair|baghaer|bina)\b.{0,25}\b(behtar|khush)\b",
+    r"\b(mere|meray)\s+(baghair|baghaer|bagair|baghayr|bina)\b.{0,25}\b(behtar|khush)\b",
     r"\bpaida (hi )?na (hoti|hota|hui|hua)\b",
     r"\b(chhat|bridge|pul|building)\b.{0,20}\bkood",
     # Urdu script: the same thoughts, written the other way (no \b: it is Latin-only here).
@@ -44,7 +44,9 @@ CRISIS_PATTERNS = [
 ]
 
 # Phrases that would otherwise false-positive against the patterns above.
-# Checked first — if matched, the message is NOT treated as a crisis signal.
+# They are removed before the patterns run: the idiom itself is not a signal,
+# but the rest of the message still is ("killing it at work, but I want to kill
+# myself" is danger).
 SAFE_PATTERNS = [
     r"\bdying to (see|watch|try|go|eat)\b",
     r"\bkilling it\b",
@@ -68,7 +70,7 @@ EMERGENCY_PATTERNS = [
     r"\b(right now|abhi|tonight|aaj)\b.{0,20}\b(bridge|roof|ledge|chhat|pul)\b.{0,20}\b(jump|kood\w*)",
     r"\boverdos(e|ed|ing)\b",
     r"\bi have a plan\b",
-    r"\b(suicide|goodbye) (note|letter)\b",
+    r"\b(suicide|goodbye) (notes?|letters?)\b",
 ]
 
 # MILD: hopelessness without stated self-harm.
@@ -96,13 +98,17 @@ def higher_tier(a: str, b: str) -> str:
     return a if TIER_ORDER.index(a) >= TIER_ORDER.index(b) else b
 
 
+def _without_safe_phrases(text: str) -> str:
+    for safe_pattern in _SAFE_REGEX:
+        text = safe_pattern.sub(" ", text)
+    return text
+
+
 def assess_lexical(text: str) -> str:
     """Stage one of detection (FR-CRIS-002): the local rule set. Returns a tier."""
     if not text:
         return "clear"
-    for safe_pattern in _SAFE_REGEX:
-        if safe_pattern.search(text):
-            return "clear"
+    text = _without_safe_phrases(text)
     if any(p.search(text) for p in _EMERGENCY_REGEX):
         return "emergency"
     if any(p.search(text) for p in _CRISIS_REGEX):
@@ -127,11 +133,10 @@ def check_crisis(text: str) -> bool:
     if not text:
         return False
 
-    # Safe patterns are checked first so obvious non-crisis phrasing
-    # (e.g. "dying to see this movie") doesn't get flagged.
-    for safe_pattern in _SAFE_REGEX:
-        if safe_pattern.search(text):
-            return False
+    # Safe phrases are removed first so obvious non-crisis phrasing
+    # (e.g. "dying to see this movie") doesn't get flagged, without hiding
+    # anything else the message says.
+    text = _without_safe_phrases(text)
 
     for crisis_pattern in _CRISIS_REGEX:
         if crisis_pattern.search(text):
