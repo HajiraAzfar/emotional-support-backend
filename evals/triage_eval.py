@@ -55,6 +55,17 @@ def offline() -> None:
         assert level == want_level, f"{text!r}: triage {level}, want {want_level}"
         card = crisis.card_for(level, safety)
         assert card == want_card, f"{text!r}: card {card}, want {want_card}"
+    # No helplines card without harm (the owner's decision, 28 Oct 2026): stress, panic or "please tell me
+    # how to use the app" gets none, even when the classifier says distress now or asks for help.
+    for text, safety in (("I'm feeling a lot of stress, I don't know what to do", S(distress=True, asks=True)),
+                         ("Can you please tell me how to use the thought journal?", S(asks=True))):
+        level = crisis.triage(crisis.assess(text, None), safety)
+        assert level is None and crisis.card_for(level, safety) is None, text
+    # On a harm-related turn they still bring the soft card; danger still brings the prominent one.
+    assert crisis.card_for(crisis.TIER2, S("self_harm", "past", distress=True)) == "soft"
+    assert crisis.card_for(crisis.TIER2, S(asks=True)) == "soft"  # the rules' mild self-harm tier, no harm type
+    assert crisis.card_for(crisis.CLARIFY, S("physical_violence", "unclear", "unclear", asks=True)) == "soft"
+    assert crisis.card_for(T1, S()) == "prominent"
     # Keywords are a signal, never the decision.
     for text in ("He use to beat me", "he raped me", "my marriage was abusive"):
         assert assess_lexical(text) == "clear", text

@@ -142,7 +142,10 @@ def card_for(level: str | None, safety) -> str | None:
     The helplines card under the reply: prominent, soft, or None. A message that
     itself tells of physical or sexual violence, past or present, gets one; so does
     ongoing abuse. Follow-ups ("I am safe now") don't. Anything else only once she
-    shows distress now or asks for help.
+    shows distress now or asks for help on a harm-related turn (triage's tier 2 or
+    clarify: self-harm signals, harm to or from someone). Stress or a request for help
+    with no harm in it gets none (the owner's decision, 28 Oct 2026); Get help stays
+    one tap away.
     """
     if level == TIER1:
         return "prominent"
@@ -152,7 +155,7 @@ def card_for(level: str | None, safety) -> str | None:
         return "prominent" if safety.timing in ("ongoing", "recent") else "soft"
     if safety.discloses and safety.harm_type == "emotional_abuse" and safety.timing == "ongoing":
         return "soft"
-    if safety.distress_now or safety.asks_for_help:
+    if (safety.distress_now or safety.asks_for_help) and level in (TIER2, CLARIFY):
         return "soft"
     return None
 
