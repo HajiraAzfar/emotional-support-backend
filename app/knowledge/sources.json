@@ -9,7 +9,14 @@
       "publisher": "World Health Organization",
       "url": "https://www.who.int/publications/i/item/9789240003927",
       "format": "PDF guide (who.int: 132 pages; IRIS record: 126 p.) with optional audio exercises; translations in many languages",
-      "topics": ["stress", "grounding", "unhooking from difficult thoughts and feelings", "acting on values", "being kind", "making room for difficult feelings"],
+      "topics": [
+        "stress",
+        "grounding",
+        "unhooking from difficult thoughts and feelings",
+        "acting on values",
+        "being kind",
+        "making room for difficult feelings"
+      ],
       "published": "2020-04-29",
       "licence": {
         "name": "CC BY-NC-SA 3.0 IGO",
@@ -21,9 +28,20 @@
         "notes": "IRIS citation states the licence. Non-commercial use needs no permission; adaptations and translations must carry WHO's disclaimer and the same or a similar licence; no endorsement, no WHO logo. The Urdu edition is published by the Human Development Research Foundation and needs its own licence check. The five skills are acceptance-based rather than classic CBT: the clinical advisor decides how to label them."
       },
       "commercial_use": "requires_permission",
-      "permissions": {"store": "not_granted", "embed": "not_granted", "adapt": "not_granted", "translate": "not_granted", "display": "not_granted"},
-      "permission_evidence": null,
-      "next_action": "Decide whether the app is commercial. If it is, request WHO permission (WHO permissions form) covering storage, embedding, adaptation and translation; if not, record that decision and its review before granting any use here."
+      "permissions": {
+        "store": "granted",
+        "embed": "granted",
+        "adapt": "granted",
+        "translate": "granted",
+        "display": "granted"
+      },
+      "permission_evidence": {
+        "granted_by": "WHO, under the CC BY-NC-SA 3.0 IGO licence, for non-commercial use; non-commercial use decided by the app owner (Hajira, HajiraAzfar)",
+        "granted_on": "2026-10-28",
+        "reference": "https://creativecommons.org/licenses/by-nc-sa/3.0/igo/ and the IRIS record https://iris.who.int/handle/10665/331901; the owner's decision is recorded in DEVLOG.md (RAG: WHO cards)"
+      },
+      "next_action": "Clinical review of the adapted cards in app/knowledge/cards/who against the guide itself (wording and section), and a licence/attribution note in the app's About screen.",
+      "use_decision": "Non-commercial: Reframe is a free student project with no ads or payments (owner, 2026-10-28). Conditions: credit WHO and the licence on every adapted card; say the adaptation was not created by WHO; share adaptations under the same licence; no WHO logo and no suggestion that WHO endorses the app. If the app becomes commercial, withdraw these grants and request WHO permission."
     },
     {
       "id": "cci-lay",
