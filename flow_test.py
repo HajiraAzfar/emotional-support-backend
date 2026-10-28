@@ -923,15 +923,18 @@ def finished_exposure(outcome, before, during, after, when):
     return j["id"]
 
 
-finished_exposure("lift mein phans jaungi", 8, 7, 4, now - timedelta(days=5))
-finished_exposure("lift mein phans jaungi", 6, 5, 2, now - timedelta(days=2))
-finished_exposure("call pe awaz kaanp jayegi", 7, 6, 5, now - timedelta(days=4))
+exposures = [finished_exposure("lift mein phans jaungi", 8, 7, 4, now - timedelta(days=5)),
+             finished_exposure("lift mein phans jaungi", 6, 5, 2, now - timedelta(days=2)),
+             finished_exposure("call pe awaz kaanp jayegi", 7, 6, 5, now - timedelta(days=4))]
 groups = {g["feared_outcome"]: g for g in c.get("/insights").json()["exposure"]}
 lift = groups["lift mein phans jaungi"]
 check(lift["enough"] and [cy["cycle"] for cy in lift["cycles"]] == [1, 2], "cycles numbered in the order they were completed")
 check([(cy["before"], cy["during"], cy["after"]) for cy in lift["cycles"]] == [(8, 7, 4), (6, 5, 2)],
       "all three distress values per cycle (FR-INS-013)")
 check(not groups["call pe awaz kaanp jayegi"]["enough"], "a single cycle is not a comparison (FR-INS-014)")
+# Dated by the real clock, while the check-in reports below use fixed October days and
+# count every journal: left in place, one of these lands on 23 Oct on some dates.
+check(all(c.delete(f"/entries/{eid}").status_code == 204 for eid in exposures), "these exposures are cleared again")
 
 print("--- daily check-in: app-owned steps, one submit, model writes only the closing")
 import json  # noqa: E402
