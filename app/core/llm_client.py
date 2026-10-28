@@ -83,6 +83,11 @@ class ChatReply(BaseModel):
     referral_flag: bool
 
 
+class ChatReplyCited(ChatReply):
+    # Only when evidence cards were retrieved for this turn (RAG); every other reply keeps ChatReply.
+    citations: list[str]  # the card ids used, such as "S1"; empty when none was
+
+
 class LLMError(Exception):
     pass
 
@@ -109,6 +114,54 @@ def _get_client() -> openai.OpenAI:
             max_retries=1,
         )
     return _client
+
+
+def embed(texts: list[str], timeout_seconds: float) -> list[list[float]]:
+    """RAG: one vector per text, in order. Raises LLMError when no embedding model is set or the call fails."""
+    if settings.LLM_MOCK or not settings.OPENAI_EMBEDDING_MODEL:
+        raise LLMError("no embedding model is configured")
+    try:
+        result = _get_client().with_options(timeout=timeout_seconds, max_retries=0).embeddings.create(
+            model=settings.OPENAI_EMBEDDING_MODEL, input=texts)
+    except openai.OpenAIError as exc:
+        raise LLMError(f"embedding failed: {type(exc).__name__}") from exc
+    return [d.embedding for d in sorted(result.data, key=lambda d: d.index)]
+
+
+class SearchQuery(BaseModel):
+    query: str
+
+
+_SEARCH_QUERY_INSTRUCTIONS = (
+    "Turn the user's message into one short English search query, at most 12 words, naming the feeling, "
+    "thought pattern or problem they describe, for finding a matching CBT self-help technique. Translate "
+    "Roman Urdu or Urdu into English. Use only what the message says; add no advice. If the message is "
+    "not about their feelings, thoughts, behaviour or a personal problem (small talk, facts, recipes, "
+    "tech help), return an empty query."
+)
+
+
+def search_query(text: str, timeout_seconds: float) -> str:
+    """
+    RAG: the message as a short English search query, since Roman Urdu embeds poorly as it is.
+    Only reached after retrieval's risk gate. "" when there is nothing to search for (small talk,
+    facts). Raises LLMError when it can't be made.
+    """
+    if settings.LLM_MOCK or not settings.OPENAI_EMBEDDING_MODEL:
+        raise LLMError("no embedding model is configured")
+    try:
+        response = _get_client().with_options(timeout=timeout_seconds, max_retries=0).responses.parse(
+            model=settings.OPENAI_CHAT_MODEL or settings.OPENAI_RESPONSE_MODEL,
+            instructions=_SEARCH_QUERY_INSTRUCTIONS,
+            input=text[:2000],
+            text_format=SearchQuery,
+            store=False,
+        )
+    except LLM_FAILURES as exc:
+        raise LLMError(f"search query failed: {type(exc).__name__}") from exc
+    if response.output_parsed is None:
+        raise LLMError("no search query came back")
+    return response.output_parsed.query.strip()[:200]
 
 
 def _as_input(history: list[tuple[str, str]], text: str | None) -> list[dict]:
@@ -491,18 +544,25 @@ def generate_chat_reply(
     system_prompt: str,
     history: list[tuple[str, str]],
     text: str,
+    cited: bool = False,
 ) -> ChatReply:
-    """One AI Chat turn. Raises LLMError if no usable reply comes back."""
+    """
+    One AI Chat turn. Raises LLMError if no usable reply comes back. `cited`: evidence
+    cards are in the prompt, so the reply also lists the ids it used (ChatReplyCited).
+    """
+    shape = ChatReplyCited if cited else ChatReply
     if settings.LLM_MOCK:
-        return ChatReply(
+        mock = {"citations": []} if cited else {}
+        return shape(
             crisis_indicators_noticed=False,
             response_text="(Mock) Acha, aur batayein. Kya chal raha hai?",
             referral_flag=False,
+            **mock,
         )
     system_prompt, history = _window(system_prompt, history)
     items = _as_input(history, text)
     model = settings.OPENAI_CHAT_MODEL or settings.OPENAI_RESPONSE_MODEL
-    return _parse_reply(model, system_prompt, items, ChatReply)
+    return _parse_reply(model, system_prompt, items, shape)
 
 
 def _parse_reply(model: str, system_prompt: str, items: list[dict], text_format):

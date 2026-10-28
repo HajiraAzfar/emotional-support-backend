@@ -37,7 +37,7 @@ from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from app.core import (
-    assessments, capture, context_builder, crisis, enforcement, language, llm_client, md_loader, slots,
+    assessments, capture, context_builder, crisis, enforcement, language, llm_client, md_loader, retrieval, slots,
 )
 from app.core.config import settings
 from app.core.database import get_db
@@ -69,6 +69,16 @@ REPLY_UNAVAILABLE = (
     "I couldn't reply just now. What you wrote is saved — you can send another "
     "message in a moment, or end here."
 )
+
+
+# What AI Chat retrieves from: the cards in app/knowledge/cards, embedded on the first search
+# (llm_client.embed); each message is searched as a short English query (llm_client.search_query).
+# No card is approved, no source is cleared and PRODUCTION has no calibrated threshold, so with
+# RAG_ENABLED on or off every turn abstains before any search. Tests swap these in.
+RAG_CARDS, RAG_SOURCES, RAG_CONFIG = md_loader.knowledge_cards(), None, retrieval.PRODUCTION
+RAG_SEARCH = retrieval.RewrittenQuery(
+    retrieval.LazyIndex(lambda: retrieval.InMemoryIndex(RAG_CARDS, llm_client.embed, RAG_SOURCES)),
+    llm_client.search_query)
 
 
 # ---------- helpers ----------
@@ -513,10 +523,12 @@ def _chat_reply(
     safety=None,
     level: str | None = None,
     card: str | None = None,
+    risk: retrieval.TurnRisk | None = None,
 ) -> enforcement.Outcome:
     """
     AI Chat: chat prompt → reply → enforcement. No entry summary and no closure
     rules; only the containment failsafe ends a chat (FR-AIR-013). Raises LLMError.
+    `risk`: the crisis screen's decision; without it retrieval refuses (RAG Step A).
     """
     domains = domains or entry.domains or ["general"]
     skill = crisis.SKILL_FOR_HARM.get(safety.harm_type) if safety else None
@@ -527,36 +539,73 @@ def _chat_reply(
     # Once she said she is safe, or Reframe asked, the question is not asked again
     # (unless danger is now: tier 1 asks directly).
     settled = enforcement.safety_settled(history, text)
-    # Content-free (FR-CRIS-013): which skill, triage and card this reply used.
-    logger.info("chat reply entry=%s skill=%s triage=%s card=%s safety_settled=%s safety=%s",
-                entry.id, domains[0], level, card, settled, safety.model_dump() if safety else None)
+    # RAG: only a turn with no risk at all can get evidence, and any failure is simply none.
+    # Never raises, so it cannot reach the reply-failure fallback in add_message.
+    retrieved = retrieval.evidence_for_turn(text, domains, risk, RAG_SEARCH, RAG_CARDS, RAG_CONFIG, RAG_SOURCES)
+    # Content-free (FR-CRIS-013): which skill, triage and card this reply used, and why there was evidence or not.
+    logger.info("chat reply entry=%s skill=%s triage=%s card=%s safety_settled=%s safety=%s rag=%s",
+                entry.id, domains[0], level, card, settled, safety.model_dump() if safety else None,
+                ",".join(retrieved.ids) or retrieved.reason)
     user_texts = [c for role, c in history if role == "user"] + [text]
     limit = capture.conversation_limits(context_builder.CHAT)["containment_turns"]
     closing = sum(1 for role, _ in history if role == "ai") >= (limit or settings.CONVERSATION_CONTAINMENT_TURNS)
-    system_prompt = context_builder.build_chat_prompt(
-        account,
-        _focus_codes(db, account),
-        domains,
-        reply_language=language.reply_language(user_texts),
-        closing=closing,
-        level=level,
-        safety=safety,
-        card=card,
-        safety_settled=settled,
-    )
     # Examples are illustrations: a reply must not reuse their sentences, nor its own earlier ones.
     seen = ([c for role, c in history if role == "ai"]
             + md_loader.example_replies("journal_types", context_builder.CHAT)
             + md_loader.example_replies("skills", domains[0]))
-    reply = llm_client.generate_chat_reply(system_prompt, history, text)
-    copied = enforcement.repeated_sentences(reply.response_text, seen)
-    if copied:
-        # A reply that echoes an example reads like a script: one fresh try.
-        rewrite = ("\n\n# Rewrite\nYour draft reused these sentences word for word. Say it in "
-                   "new words:\n" + "\n".join(f"- {s}" for s in copied))
-        reply = llm_client.generate_chat_reply(system_prompt + rewrite, history, text)
-    return enforcement.enforce_chat(reply, closing=closing, seen=seen,
-                                    no_safety_question=settled and level != crisis.TIER1)
+    # Earlier replies' [S1]-style ids named earlier turns' cards: the model never sees them.
+    model_history = [(role, retrieval.without_ids(c) if role == "ai" else c) for role, c in history]
+
+    def generate(evidence: retrieval.Evidence) -> llm_client.ChatReply:
+        system_prompt = context_builder.build_chat_prompt(
+            account,
+            _focus_codes(db, account),
+            domains,
+            reply_language=language.reply_language(user_texts),
+            closing=closing,
+            level=level,
+            safety=safety,
+            card=card,
+            safety_settled=settled,
+            evidence=evidence.block(),
+        )
+        cited = bool(evidence.items)
+        reply = llm_client.generate_chat_reply(system_prompt, model_history, text, cited=cited)
+        copied = enforcement.repeated_sentences(reply.response_text, seen)
+        if copied:
+            # A reply that echoes an example reads like a script: one fresh try.
+            rewrite = ("\n\n# Rewrite\nYour draft reused these sentences word for word. Say it in "
+                       "new words:\n" + "\n".join(f"- {s}" for s in copied))
+            reply = llm_client.generate_chat_reply(system_prompt + rewrite, model_history, text, cited=cited)
+        return reply
+
+    evidence = retrieved
+    try:
+        reply = generate(evidence)
+    except llm_client.LLMError:
+        if not evidence.items:
+            raise
+        reply = None
+    if evidence.items and (reply is None or reply.crisis_indicators_noticed):
+        # Evidence is for calm turns and must never cost a reply: answer again exactly as without it.
+        logger.info("chat reply entry=%s rag dropped: %s", entry.id, "crisis noticed" if reply else "reply failed")
+        first, evidence = reply, retrieval.Evidence(reason="dropped")
+        try:
+            reply = generate(evidence)
+        except llm_client.LLMError:
+            if first is None:
+                raise
+            reply, evidence = first, retrieved  # the crisis it noticed must still reach the safety flow
+        if first is not None and not reply.crisis_indicators_noticed:
+            # What the evidence reply noticed stays noticed, whatever the second reply says.
+            reply = reply.model_copy(update={"crisis_indicators_noticed": True})
+    outcome = enforcement.enforce_chat(reply, closing=closing, seen=seen,
+                                       no_safety_question=settled and level != crisis.TIER1)
+    if evidence.items:
+        # Only ids retrieved for this turn survive; invented citation formats are removed.
+        outcome.reply_text, kept = retrieval.enforce_citations(outcome.reply_text, reply.citations, evidence)
+        logger.info("chat reply entry=%s citations=%s", entry.id, kept)
+    return outcome
 
 
 def _suppress_conversation(db: Session, entry: Entry, account: Account) -> None:
@@ -1372,6 +1421,8 @@ def add_message(
     # Always-on safety check, before the skill is chosen: a topic miss can't skip it.
     safety = classification.safety
     level = crisis.triage(event.tier if event else "clear", safety)
+    # What the screen decided, before the tier-1 record below: retrieval re-checks it.
+    risk = retrieval.TurnRisk(event.tier if event else "clear", level, safety)
     if is_chat and level == crisis.TIER1 and entry.crisis_tier not in crisis.SUPPRESSING_TIERS:
         event = crisis.record(db, account.id, entry, "triage", "danger", lang)  # content-free record
     card = _card_due(db, entry, safety, level) if is_chat else journal_card
@@ -1386,7 +1437,7 @@ def add_message(
 
     try:
         if is_chat:
-            outcome = _chat_reply(db, entry, account, history, text, classification.domains, safety, level, card)
+            outcome = _chat_reply(db, entry, account, history, text, classification.domains, safety, level, card, risk)
         else:
             outcome = _reflect(db, entry, account, history, text, classification.domains)
     except llm_client.LLMError:

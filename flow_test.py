@@ -347,6 +347,213 @@ with patch.object(lc, "_get_client", return_value=fake):
     fake.responses.parse.side_effect = parse
     model.update(risk="clear")
 
+print("--- F3: RAG Step A: retrieval wired into AI Chat, off by default")
+from contextlib import nullcontext  # noqa: E402
+from app.core import retrieval as rt  # noqa: E402
+from app.routers import entries as entries_router  # noqa: E402
+from evals import retrieval_eval as rx  # noqa: E402  (synthetic cards, fake embedder, invented cleared source)
+
+
+class SearchSpy:
+    """Counts searches through a fake index; can fail on purpose."""
+
+    def __init__(self, inner, error=None):
+        self.inner, self.error, self.calls = inner, error, 0
+
+    def search(self, query, top_k, topics, timeout_seconds):
+        self.calls += 1
+        if self.error:
+            raise self.error
+        return self.inner.search(query, top_k, topics, timeout_seconds)
+
+
+def parse_rag(**kw):
+    """The flow's fake model, plus the cited reply shape, used only when evidence is in the prompt."""
+    if kw["text_format"] in (lc.ChatReply, lc.ChatReplyCited):
+        model["input"] = kw.get("input")
+    if kw["text_format"] is lc.ChatReplyCited:
+        calls.append("ChatReplyCited")
+        model["instructions"] = kw.get("instructions")
+        return SimpleNamespace(output_parsed=lc.ChatReplyCited(
+            crisis_indicators_noticed=model.get("cited_crisis", False), response_text=model["cited_text"],
+            referral_flag=False, citations=model["cited_ids"]))
+    return parse(**kw)
+
+
+def chat_turn(text, rag=False, **hooks):
+    """
+    One message in a fresh chat, with RAG_ENABLED as given and entries.RAG_* swapped for the
+    turn. Returns the stored AI message, the instructions the model got, and the reply shapes asked for.
+    """
+    settings.RAG_ENABLED = rag
+    try:
+        with patch.multiple(entries_router, **hooks) if hooks else nullcontext():
+            u = f"/entries/{post('/entries', {'journal_type': 'chat'})['id']}"
+            calls.clear()
+            j = post(u + "/messages", {"content": text})
+    finally:
+        settings.RAG_ENABLED = False
+    return last_ai(j), model["instructions"], [c for c in calls if c.startswith("ChatReply")]
+
+
+def same(a, b):
+    return (a["content"], a["card"], a["kind"]) == (b["content"], b["card"], b["kind"])
+
+
+index = rt.InMemoryIndex(rx.CARDS, rx.fake_embed, rx.sources())
+FAKE = {"RAG_CARDS": rx.CARDS, "RAG_SOURCES": rx.sources()}  # approved synthetic cards, an invented cleared source
+worry = "worry at night, cannot sleep"
+
+with patch.object(lc, "_get_client", return_value=fake):
+    fake.responses.parse.side_effect = parse_rag
+    model.update(risk="clear", safety=NO_HARM, reflection_crisis=False, replies=[])
+    base, base_prompt, base_shape = chat_turn(worry)
+    check(base_shape == ["ChatReply"] and "# Using the evidence below" not in base_prompt
+          and entries_router.RAG_CONFIG is rt.PRODUCTION and len(entries_router.RAG_CARDS) >= 8
+          and rt.usable_cards(entries_router.RAG_CARDS) == [] and not settings.RAG_ENABLED,
+          "F3: by default AI Chat has only draft, uncleared cards (none usable), the uncalibrated production config, "
+          "RAG off and the plain ChatReply")
+
+    # 1. Off: no search and the same prompt, even with cards, a working index and the test threshold in place.
+    spy = SearchSpy(index)
+    got, prompt, shape = chat_turn(worry, rag=False, RAG_CONFIG=rx.TEST, RAG_SEARCH=spy, **FAKE)
+    check(spy.calls == 0 and prompt == base_prompt and shape == ["ChatReply"] and same(got, base),
+          "RAG off: the index is never searched, the prompt is byte-identical, the plain ChatReply")
+
+    # 2. On, but the production config has no calibrated threshold: it abstains before any search.
+    spy = SearchSpy(index)
+    got, prompt, shape = chat_turn(worry, rag=True, RAG_SEARCH=spy, **FAKE)
+    check(spy.calls == 0 and prompt == base_prompt and shape == ["ChatReply"] and same(got, base),
+          "RAG on with the production config: abstains (no threshold), prompt and reply unchanged")
+
+    # 3. On, the test threshold and approved fake cards: evidence, the cited shape, citations enforced.
+    model.update(cited_text="Try a short worry period [S1]. A study proves it [S9].", cited_ids=["S1", "S9"])
+    spy = SearchSpy(index)
+    got, prompt, shape = chat_turn(worry, rag=True, RAG_CONFIG=rx.TEST, RAG_SEARCH=spy, **FAKE)
+    settings.RAG_ENABLED = True
+    try:
+        expected = rt.evidence_for_turn(worry, ["overthinking"], rt.TurnRisk("clear", None, NO_HARM),
+                                        index, rx.CARDS, rx.TEST, rx.sources())
+    finally:
+        settings.RAG_ENABLED = False
+    added = md_loader.load_chat_evidence() + "\n\n" + expected.block()
+    check(spy.calls == 1 and shape == ["ChatReplyCited"] and expected.ids == ["S1"]
+          and "[S1] Test card fx-worry" in prompt,
+          "RAG on, a clear turn: one search, the fx-worry card as [S1], the cited reply shape")
+    check(prompt.count(added) == 1 and prompt.replace(added + "\n\n", "", 1) == base_prompt,
+          "the prompt is the old one plus exactly one evidence section, nothing else changed")
+    check("DRAFT_NOT_CLINICALLY_APPROVED" not in prompt, "the draft marker stays in chat_evidence.md, never in the prompt")
+    check(got["content"] == "Try a short worry period [S1]. A study proves it." and got["card"] is None
+          and got["kind"] == "chat", "only this turn's [S1] survives; the invented [S9] is removed")
+
+    # 4. Risk of any kind: no search, and prompt, card and reply exactly as with RAG off.
+    for name, text, state in (
+        ("tier 1 by the rules", "I want to kill myself", {"risk": "clear", "safety": NO_HARM}),
+        ("tier 1 by the classifier", "I can't do this anymore", {"risk": "danger", "safety": safety("self_harm", "ongoing", "yes")}),
+        ("clarify", "it happened again", {"risk": "clear", "safety": safety("physical_violence", "unclear", "unclear")}),
+        ("a harm disclosure", "he used to hit me", {"risk": "clear", "safety": safety("physical_violence", "past")}),
+        ("mild risk", "honestly what's the point", {"risk": "mild", "safety": NO_HARM}),
+    ):
+        model.update(**state)
+        off, off_prompt, off_shape = chat_turn(text)
+        spy = SearchSpy(index)
+        on, on_prompt, on_shape = chat_turn(text, rag=True, RAG_CONFIG=rx.TEST, RAG_SEARCH=spy, **FAKE)
+        check(spy.calls == 0 and on_prompt == off_prompt and on_shape == off_shape == ["ChatReply"] and same(on, off),
+              f"RAG on, {name}: no search; prompt, card ({off['card']}) and reply exactly as with RAG off")
+
+    def classifier_down(**kw):
+        if kw["text_format"] is lc.DomainResult:
+            raise lc.LLMError("classifier down")
+        return parse_rag(**kw)
+
+    fake.responses.parse.side_effect = classifier_down
+    model.update(risk="clear", safety=NO_HARM)
+    off, off_prompt, _ = chat_turn(worry)
+    spy = SearchSpy(index)
+    on, on_prompt, on_shape = chat_turn(worry, rag=True, RAG_CONFIG=rx.TEST, RAG_SEARCH=spy, **FAKE)
+    check(spy.calls == 0 and on_prompt == off_prompt and on_shape == ["ChatReply"] and same(on, off)
+          and on["content"] == "Model reply here.", "RAG on, classifier down: no search, the reply exactly as with RAG off")
+    fake.responses.parse.side_effect = parse_rag
+
+    # 5. A failing search is simply no evidence: the normal reply, never a fallback.
+    for error in (RuntimeError("index down"), lc.LLMError("embeddings down"), TimeoutError()):
+        spy = SearchSpy(index, error=error)
+        got, prompt, shape = chat_turn(worry, rag=True, RAG_CONFIG=rx.TEST, RAG_SEARCH=spy, **FAKE)
+        check(spy.calls == 1 and prompt == base_prompt and shape == ["ChatReply"] and same(got, base),
+              f"a failing search ({type(error).__name__}) gives the normal reply, never a fallback")
+    got, prompt, shape = chat_turn(worry, rag=True, RAG_CONFIG=rx.TEST, **FAKE)  # the default index, with no embedding model set
+    check(prompt == base_prompt and same(got, base), "the default index, with no embedding model set, never breaks a reply")
+
+    # Step B. An earlier reply's [S1] is stored as she saw it, but the model never sees it again.
+    model.update(cited_text="A worry period can help [S1].", cited_ids=["S1"])
+    settings.RAG_ENABLED = True
+    try:
+        with patch.multiple(entries_router, RAG_CONFIG=rx.TEST, RAG_SEARCH=SearchSpy(index), **FAKE):
+            u = f"/entries/{post('/entries', {'journal_type': 'chat'})['id']}"
+            first = last_ai(post(u + "/messages", {"content": worry}))
+            post(u + "/messages", {"content": "ok, and then what"})
+    finally:
+        settings.RAG_ENABLED = False
+    check(first["content"] == "A worry period can help [S1]." and "A worry period can help." in str(model["input"])
+          and "[S1]" not in str(model["input"]), "an earlier reply's [S1] is kept for her, but the model never sees it again")
+
+    # A crisis the evidence reply noticed: answered again without evidence, and the crisis still counts.
+    model.update(cited_text="Try a worry period [S1].", cited_ids=["S1"], cited_crisis=True)
+    for second_notices in (True, False):
+        model.update(reflection_crisis=True)
+        off, _, _ = chat_turn(worry)
+        model.update(reflection_crisis=second_notices)
+        on, prompt, shape = chat_turn(worry, rag=True, RAG_CONFIG=rx.TEST, RAG_SEARCH=SearchSpy(index), **FAKE)
+        check(shape == ["ChatReplyCited", "ChatReply"] and prompt == base_prompt and same(on, off),
+              f"evidence reply noticed a crisis, the retry {'does' if second_notices else 'does not'}: "
+              f"answered without evidence, exactly as RAG off with the crisis noticed (card {off['card']})")
+
+    def second_fails(**kw):
+        if kw["text_format"] is lc.ChatReply:
+            raise lc.LLMError("blocked")
+        return parse_rag(**kw)
+
+    fake.responses.parse.side_effect = second_fails
+    on, _, shape = chat_turn(worry, rag=True, RAG_CONFIG=rx.TEST, RAG_SEARCH=SearchSpy(index), **FAKE)
+    check(shape == ["ChatReplyCited"] and on["content"] == "Try a worry period [S1]." and (on["card"], on["kind"]) == (off["card"], off["kind"]),
+          "evidence reply noticed a crisis and the retry fails: the first reply is kept, so the crisis still reaches the safety flow")
+
+    def cited_fails(**kw):
+        if kw["text_format"] is lc.ChatReplyCited:
+            raise lc.LLMError("blocked")
+        return parse_rag(**kw)
+
+    model.update(cited_crisis=False, reflection_crisis=False)
+    fake.responses.parse.side_effect = cited_fails
+    got, prompt, shape = chat_turn(worry, rag=True, RAG_CONFIG=rx.TEST, RAG_SEARCH=SearchSpy(index), **FAKE)
+    check(shape == ["ChatReply"] and prompt == base_prompt and same(got, base),
+          "a failed evidence reply is answered again without evidence: the normal reply, not a fallback")
+    fake.responses.parse.side_effect = parse_rag
+
+    # The reply-failure fallbacks are unchanged with RAG on, crisis text and cards included.
+    def reply_fails_rag(**kw):
+        if kw["text_format"] in (lc.ChatReply, lc.ChatReplyCited):
+            raise lc.LLMError("blocked")
+        return parse_rag(**kw)
+
+    fake.responses.parse.side_effect = reply_fails_rag
+    for name, text, state in (
+        ("tier 1", "everyone would be better off without me", {"risk": "danger", "safety": safety("self_harm", "ongoing", "unclear")}),
+        ("tier 1 in Roman Urdu", "sab mere bagair behtar honge", {"risk": "mild", "safety": NO_HARM}),
+        ("a harm disclosure", "he used to hit me", {"risk": "clear", "safety": safety("physical_violence", "past")}),
+        ("a clear turn", "hi, long day", {"risk": "clear", "safety": NO_HARM}),
+        ("a clear turn that had evidence", worry, {"risk": "clear", "safety": NO_HARM}),
+    ):
+        model.update(**state)
+        off, _, _ = chat_turn(text)
+        on, _, _ = chat_turn(text, rag=True, RAG_CONFIG=rx.TEST, RAG_SEARCH=SearchSpy(index), **FAKE)
+        check(same(on, off) and on["kind"] == "notice",
+              f"the reply fails, {name}: the same fallback text and card ({on['card']}) with RAG on")
+    check(on["content"] == REPLY_UNAVAILABLE and on["card"] is None,
+          "a failed reply on a turn that had evidence is the plain notice, never crisis text")
+    fake.responses.parse.side_effect = parse
+    model.update(risk="clear", safety=NO_HARM, replies=[])
+
 print("--- G: resume, list, delete")
 settings.OPENAI_API_KEY = None
 j = post("/entries", {"journal_type": "check_in"}); ud = f"/entries/{j['id']}"

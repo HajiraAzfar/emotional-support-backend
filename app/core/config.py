@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     # AI Chat replies; unset uses OPENAI_RESPONSE_MODEL. Lets the chat run on a
     # stronger model than the journals without changing every call.
     OPENAI_CHAT_MODEL: str | None = None
+    # RAG: the embedding model (or Azure deployment) for knowledge cards, on the same client.
+    # Unset: no embeddings, so retrieval finds no evidence.
+    OPENAI_EMBEDDING_MODEL: str | None = None
     # Voice messages: Groq's Whisper large v3. Unset turns voice off — the app
     # falls back to typing. Reads VoiceEntry too, which is what the key is
     # called in .env.
@@ -29,6 +32,9 @@ class Settings(BaseSettings):
     OPENAI_TIMEOUT_SECONDS: float = 30.0
     # true → no OpenAI calls; fixed placeholder replies so the app can be tested without a key.
     LLM_MOCK: bool = False
+    # RAG Phase 2: evidence retrieval (app/core/retrieval.py). Off: retrieval returns nothing.
+    # Nothing in AI Chat calls it yet, so turning it on changes no reply.
+    RAG_ENABLED: bool = False
     # Prints each verification code to the console. Only for local development,
     # where Resend will not deliver to anyone but the account owner: on a server
     # it would write login codes into logs that are kept.

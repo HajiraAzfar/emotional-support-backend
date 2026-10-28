@@ -107,9 +107,32 @@ def load_weekly_report() -> str:
     return _app_md("weekly_report")
 
 
+def load_chat_evidence() -> str:
+    """AI Chat's evidence-mode rules, added only when cards were retrieved for the turn."""
+    return _app_md("chat_evidence")
+
+
 _missing = set(DOMAINS) - available("skills")
 if _missing:
     raise RuntimeError(f"Missing skills/<name>/{SKILL_FILE} for domains: {sorted(_missing)}")
 _undescribed = [n for n, d in skill_descriptions().items() if not d]
 if _undescribed:
     raise RuntimeError(f"Skills without a description: {sorted(_undescribed)}")
+KNOWLEDGE_CARDS = APP_DIR / "knowledge" / "cards"
+
+
+def knowledge_cards() -> list[dict]:
+    """
+    RAG cards (knowledge/cards/<area>/<id>.md): frontmatter fields, `topics` as a list and the
+    body as `text`. A file that can't be read is left out. Whether a card may be used is
+    retrieval's decision (approved, from a cleared source, no draft marker), not this loader's.
+    """
+    cards = []
+    for path in sorted(KNOWLEDGE_CARDS.rglob("*.md")):
+        try:
+            fields, body = _split_frontmatter(path.read_text(encoding="utf-8").strip())
+        except (OSError, UnicodeDecodeError, ValueError):
+            continue
+        topics = [t.strip() for t in fields.get("topics", "").split(",") if t.strip()]
+        cards.append({**fields, "topics": topics, "text": body})
+    return cards

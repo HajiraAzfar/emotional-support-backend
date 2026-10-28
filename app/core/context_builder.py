@@ -172,8 +172,12 @@ def build_chat_prompt(
     safety=None,
     card: str | None = None,
     safety_settled: bool = False,
+    evidence: str | None = None,
 ) -> str:
     """
+    `evidence`: this turn's retrieved cards (retrieval.Evidence.block()). Only when it
+    is given does the prompt gain a section; without it the prompt is exactly as before.
+
     AI Chat. Its own self-contained prompt replaces the base instructions, which
     are written for the conversation after a journal entry (offer, closure
     rules, a recorded entry to refer to). Clinical context keeps its place as
@@ -194,6 +198,8 @@ def build_chat_prompt(
             "# Topic notes (background on this topic; the chat rules above decide how you talk)\n"
             + md_loader.load("skills", domains[0])
         )
+    if evidence:
+        sections.append(md_loader.load_chat_evidence() + "\n\n" + evidence)
     sections.append(_profile(account, domains, chat=True))
     sections.append(f"# Reply language\n{language.instruction(reply_language)}")
 
