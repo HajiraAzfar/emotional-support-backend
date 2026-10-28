@@ -1,0 +1,124 @@
+{
+  "_comment": "RAG Phase 1 source registry. Facts below were read from each publisher's public pages on 2026-10-28; reading a page is not permission to store, embed, adapt, translate or display its content. A source may be ingested only when its licence is verified and 'store' and 'embed' are both 'granted' with the written permission recorded under 'permission_evidence' (see app/core/knowledge.py). Not legal advice: have the licence and permission notes reviewed before Phase 3.",
+  "version": "1",
+  "checked_on": "2026-10-28",
+  "sources": [
+    {
+      "id": "who-dwm",
+      "title": "Doing What Matters in Times of Stress: An Illustrated Guide",
+      "publisher": "World Health Organization",
+      "url": "https://www.who.int/publications/i/item/9789240003927",
+      "format": "PDF guide (who.int: 132 pages; IRIS record: 126 p.) with optional audio exercises; translations in many languages",
+      "topics": ["stress", "grounding", "unhooking from difficult thoughts and feelings", "acting on values", "being kind", "making room for difficult feelings"],
+      "published": "2020-04-29",
+      "licence": {
+        "name": "CC BY-NC-SA 3.0 IGO",
+        "status": "verified",
+        "verified_from": [
+          "https://iris.who.int/handle/10665/331901",
+          "https://www.who.int/about/policies/publishing/copyright"
+        ],
+        "notes": "IRIS citation states the licence. Non-commercial use needs no permission; adaptations and translations must carry WHO's disclaimer and the same or a similar licence; no endorsement, no WHO logo. The Urdu edition is published by the Human Development Research Foundation and needs its own licence check. The five skills are acceptance-based rather than classic CBT: the clinical advisor decides how to label them."
+      },
+      "commercial_use": "requires_permission",
+      "permissions": {"store": "not_granted", "embed": "not_granted", "adapt": "not_granted", "translate": "not_granted", "display": "not_granted"},
+      "permission_evidence": null,
+      "next_action": "Decide whether the app is commercial. If it is, request WHO permission (WHO permissions form) covering storage, embedding, adaptation and translation; if not, record that decision and its review before granting any use here."
+    },
+    {
+      "id": "cci-lay",
+      "title": "Looking After Yourself (as named in the brief; not verified)",
+      "publisher": "Centre for Clinical Interventions (not verified)",
+      "url": "https://www.cci.health.wa.gov.au/Resources/Looking-After-Yourself",
+      "format": "Not verified (the page could not be opened during the audit)",
+      "topics": ["not verified"],
+      "published": null,
+      "licence": {
+        "name": "Not verified",
+        "status": "unverified",
+        "verified_from": [],
+        "notes": "Terms could not be read on 2026-10-28. Treat as all rights reserved until CCI confirms otherwise in writing."
+      },
+      "commercial_use": "unknown",
+      "permissions": {"store": "not_granted", "embed": "not_granted", "adapt": "not_granted", "translate": "not_granted", "display": "not_granted"},
+      "permission_evidence": null,
+      "next_action": "Open CCI's own copyright terms, then ask CCI for written permission covering app use, storage, embedding, adaptation and translation."
+    },
+    {
+      "id": "nhs-emm-cbt",
+      "title": "Online self-help CBT techniques",
+      "publisher": "Every Mind Matters, NHS (site operated by the Department of Health and Social Care)",
+      "url": "https://www.nhs.uk/every-mind-matters/mental-wellbeing-tips/self-help-cbt-techniques/",
+      "format": "Web page linking 7 guides, a video and the Mind Plan quiz",
+      "topics": ["reframing unhelpful thoughts", "worry time", "facing fears", "problem solving", "to-do lists and motivation", "resilience"],
+      "published": null,
+      "licence": {
+        "name": "Crown copyright; all rights reserved (Every Mind Matters terms of use)",
+        "status": "verified",
+        "verified_from": ["https://www.nhs.uk/every-mind-matters/terms-and-conditions/"],
+        "notes": "Terms allow printing one copy and downloading extracts for personal use, forbid modifying copies, and require a licence for any commercial use. The page shows no review date."
+      },
+      "commercial_use": "requires_licence",
+      "permissions": {"store": "not_granted", "embed": "not_granted", "adapt": "not_granted", "translate": "not_granted", "display": "not_granted"},
+      "permission_evidence": null,
+      "next_action": "Request a licence from DHSC through the site's contact page; until then, link out only."
+    },
+    {
+      "id": "beck-resources",
+      "title": "Resources for Professionals and Students",
+      "publisher": "Beck Institute for Cognitive Behavior Therapy",
+      "url": "https://beckinstitute.org/cbt-resources/resources-for-professionals-and-students/",
+      "format": "Web hub: assessment tools, videos, research list, CBT Worksheet Packet e-booklet, patient pamphlets",
+      "topics": ["CBT for clinicians", "worksheets", "assessment tools"],
+      "published": null,
+      "licence": {
+        "name": "Copyright Beck Institute / J. Beck; book material also with Guilford Press",
+        "status": "verified",
+        "verified_from": ["https://beckinstitute.org/permission-to-use-beck-institute-materials/"],
+        "notes": "Permission is granted per request, for one use only. Material from commercially published books needs the publisher's permission. The Worksheet Packet is tied to Cognitive Behavior Therapy: Basics and Beyond, 3rd edition (Guilford Press)."
+      },
+      "commercial_use": "requires_permission",
+      "permissions": {"store": "not_granted", "embed": "not_granted", "adapt": "not_granted", "translate": "not_granted", "display": "not_granted"},
+      "permission_evidence": null,
+      "next_action": "Do not ingest. Clinician background reading only; any use in the app needs a Beck permission request, and Guilford Press for book-derived worksheets."
+    },
+    {
+      "id": "beck-permission",
+      "title": "Permission to Use Beck Institute Materials",
+      "publisher": "Beck Institute for Cognitive Behavior Therapy",
+      "url": "https://beckinstitute.org/permission-to-use-beck-institute-materials/",
+      "format": "Web page (permission policy, not clinical content)",
+      "topics": ["permission process for beck-resources"],
+      "published": null,
+      "licence": {
+        "name": "Copyright Beck Institute",
+        "status": "verified",
+        "verified_from": ["https://beckinstitute.org/permission-to-use-beck-institute-materials/"],
+        "notes": "A process reference, not content to ingest."
+      },
+      "commercial_use": "not_applicable",
+      "permissions": {"store": "not_granted", "embed": "not_granted", "adapt": "not_granted", "translate": "not_granted", "display": "not_granted"},
+      "permission_evidence": null,
+      "next_action": "Use as the process for any request about beck-resources."
+    },
+    {
+      "id": "reframe-original",
+      "title": "Reframe CBT knowledge cards (original text)",
+      "publisher": "Reframe app",
+      "url": "https://github.com/HajiraAzfar/emotional-support-backend/tree/main/app/knowledge/cards",
+      "format": "Short Markdown cards in app/knowledge/cards, one technique each",
+      "topics": ["thought records", "thinking traps", "grounding", "slow breathing", "behavioural activation", "worry time", "problem solving"],
+      "published": null,
+      "licence": {
+        "name": "Original text written for this app on 2026-10-28",
+        "status": "unverified",
+        "verified_from": [],
+        "notes": "Plain-language descriptions of widely taught CBT techniques, written for this app; not copied or adapted from any source above. The url is where the cards live once committed. The owner has not yet confirmed ownership or the licence, so nothing is granted."
+      },
+      "commercial_use": "not_applicable",
+      "permissions": {"store": "not_granted", "embed": "not_granted", "adapt": "not_granted", "translate": "not_granted", "display": "not_granted"},
+      "permission_evidence": null,
+      "next_action": "The owner confirms authorship and grants store and embed (and display) in writing, recorded under permission_evidence; a clinical advisor reviews each card and removes its DRAFT marker only when it is approved."
+    }
+  ]
+}
