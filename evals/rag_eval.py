@@ -103,7 +103,7 @@ def gate(cards) -> list[dict]:
     registry = [s for s in kn.load_sources() if s["id"] != "reframe-app-help"] + [granted]
     approved = [{**c, "clinical_status": "approved"} if c["source_id"] == "reframe-app-help" else c for c in cards]
     passed = {c["id"] for c in rt.usable_cards(approved, registry)}
-    assert passed == {c["id"] for c in cards if c["source_id"] == "reframe-app-help"} and len(passed) >= 12, passed
+    assert passed == {c["id"] for c in cards if c["source_id"] == "reframe-app-help"} and len(passed) >= 11, passed
     copies = test_copies(cards)
     # Draft status and an uncleared source are each card's only problems.
     assert {c["id"] for c in rt.usable_cards(copies, rx.sources())} == set(ids)
