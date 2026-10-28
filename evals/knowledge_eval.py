@@ -67,7 +67,7 @@ def offline() -> None:
     assert kn.validate(sources) == [], kn.validate(sources)
     by_id = {s["id"]: s for s in sources}
     assert list(by_id) == ["who-dwm", "cci-lay", "nhs-emm-cbt", "beck-resources", "beck-permission",
-                           "reframe-original"], list(by_id)
+                           "reframe-original", "reframe-app-help"], list(by_id)
     # The app's own draft cards: original text, but ownership and licence not yet confirmed.
     assert (by_id["reframe-original"]["licence"]["status"], by_id["reframe-original"]["commercial_use"]) ==         ("unverified", "not_applicable")
     who, cci, nhs = by_id["who-dwm"], by_id["cci-lay"], by_id["nhs-emm-cbt"]

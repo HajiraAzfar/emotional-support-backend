@@ -119,6 +119,41 @@
       "permissions": {"store": "not_granted", "embed": "not_granted", "adapt": "not_granted", "translate": "not_granted", "display": "not_granted"},
       "permission_evidence": null,
       "next_action": "The owner confirms authorship and grants store and embed (and display) in writing, recorded under permission_evidence; a clinical advisor reviews each card and removes its DRAFT marker only when it is approved."
+    },
+    {
+      "id": "reframe-app-help",
+      "title": "Reframe app help cards (original text)",
+      "publisher": "Reframe app",
+      "url": "https://github.com/HajiraAzfar/emotional-support-backend/tree/main/app/knowledge/cards/app",
+      "format": "Short Markdown cards in app/knowledge/cards/app, one screen or feature each",
+      "topics": [
+        "check-ins",
+        "journals",
+        "AI chat",
+        "history",
+        "insights and reports",
+        "calm tools",
+        "library",
+        "settings and privacy",
+        "getting help"
+      ],
+      "published": null,
+      "licence": {
+        "name": "Original text written for this app on 2026-10-28",
+        "status": "unverified",
+        "verified_from": [],
+        "notes": "How to use the app, written from its screens as described in DEVLOG.md. Not clinical content, so no clinician review is needed, but nothing is granted until the owner checks the cards against the app."
+      },
+      "commercial_use": "not_applicable",
+      "permissions": {
+        "store": "not_granted",
+        "embed": "not_granted",
+        "adapt": "not_granted",
+        "translate": "not_granted",
+        "display": "not_granted"
+      },
+      "permission_evidence": null,
+      "next_action": "The owner checks each card against the current app, grants store and embed in writing under permission_evidence, and removes the card's DRAFT marker. Re-check a card whenever its screen changes."
     }
   ]
 }

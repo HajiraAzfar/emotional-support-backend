@@ -134,10 +134,11 @@ class SearchQuery(BaseModel):
 
 _SEARCH_QUERY_INSTRUCTIONS = (
     "Turn the user's message into one short English search query, at most 12 words, naming the feeling, "
-    "thought pattern or problem they describe, for finding a matching CBT self-help technique. Translate "
-    "Roman Urdu or Urdu into English. Use only what the message says; add no advice. If the message is "
-    "not about their feelings, thoughts, behaviour or a personal problem (small talk, facts, recipes, "
-    "tech help), return an empty query."
+    "thought pattern or problem they describe, for finding a matching CBT self-help technique. If they ask "
+    "how to use the Reframe app or one of its features (check-ins, journals, chat, history, reports, "
+    "settings), write a query about that feature instead. Translate Roman Urdu or Urdu into English. Use "
+    "only what the message says; add no advice. If the message is about neither (small talk, facts, "
+    "recipes, other apps or tech help), return an empty query."
 )
 
 

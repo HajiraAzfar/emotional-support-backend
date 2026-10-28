@@ -38,6 +38,10 @@ QUERIES = [
     ("I have so many problems and don't know where to start", "problem-solving"),
     ("I must never make mistakes, I should be better than this", "should-statements"),
     ("mujhe kabhi rona nahi chahiye, mujhe strong hona chahiye", "should-statements"),
+    ("How do I do a check-in?", "app-check-in"),
+    ("thought journal kaise use karoon?", "app-thought-journal"),
+    ("Where can I download my weekly report?", "app-insights-reports"),
+    ("apna account kaise delete karoon", "app-settings-privacy"),
     ("mujhe lagta hai sab kuch kharab ho jaye ga", "catastrophizing"),
     ("raat bhar pareshani aur fikr rehti hai, neend nahi aati", "worry-time"),
     ("ghabrahat ho rahi hai, saans tez chal rahi hai", "slow-breathing"),
@@ -66,6 +70,10 @@ HELD_OUT = [
     ("lagta hai main yahan hoon hi nahi, sab kuch ajeeb sa lag raha hai", "grounding-54321"),
     ("Everyone at work thinks I'm stupid, I can tell", "mind-reading"),
     ("I should be able to handle everything on my own", "should-statements"),
+    ("subah ka mood app mein kahan record karna hai?", "app-check-in"),
+    ("How do I make a fear ladder in the app?", "app-exposure-journal"),
+    ("purani chats kahan milengi?", "app-history"),
+    ("app mein saans wali exercise kahan hai", "app-calm-tools"),
     ("aaj khane mein kya banaun?", None),
     ("is saal Eid kis din hai?", None),
 ]
@@ -80,7 +88,7 @@ def test_copies(cards) -> list[dict]:
 def gate(cards) -> list[dict]:
     """The real cards, the real gate. Returns the test-only approved copies."""
     ids = [c.get("id") for c in cards]
-    assert len(ids) >= 8 and len(set(ids)) == len(ids), ids
+    assert len(ids) >= 20 and len(set(ids)) == len(ids), ids
     assert rt.usable_cards(cards) == [], "a card passed the real gate: none is approved or cleared"
     copies = test_copies(cards)
     # Draft status and an uncleared source are each card's only problems.
