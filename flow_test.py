@@ -34,6 +34,11 @@ from app.core import llm_client as lc
 from app.core.config import settings
 from app.core.crisis_check import assess_lexical, check_crisis
 
+# No test reaches a real model. A section that wants replies patches _get_client with
+# a fake; everywhere else the client fails at once, as it does when the service is down.
+# Without this, the client cached while the key was "test" kept calling the real endpoint.
+patch.object(lc, "_get_client", side_effect=lc.LLMError("flow_test never calls a real model")).start()
+
 db = S()
 acct = Account(email="t@x.com", work_issues=["overthinking"], life_vision="sukoon", distress_baseline=6)
 db.add(acct); db.commit(); db.refresh(acct)
@@ -2803,4 +2808,5 @@ check(days_listed[busy.date().isoformat()] == 3 and days_listed[moved["savoring"
       f"every finished day, week and month with an entry in any journal is listed: {days_listed}")
 app.dependency_overrides[get_current_user] = lambda: S().get(Account, acct.id)
 
+check(lc._client is None, "no test created a real model client")
 print(f"\nALL {ok} CHECKS PASSED")
