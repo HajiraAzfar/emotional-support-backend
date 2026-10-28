@@ -591,7 +591,8 @@ def _citations(index) -> None:
 
 
 def _production_untouched(index) -> None:
-    assert Settings.model_fields["RAG_ENABLED"].default is False
+    # On by default since 28 Oct 2026 (the owner's decision); the gate still uses only approved cards from cleared sources.
+    assert Settings.model_fields["RAG_ENABLED"].default is True
     assert not hasattr(rt, "_POOL"), "no background thread pool"
     app_dir = pathlib.Path(rt.__file__).resolve().parents[1]
 

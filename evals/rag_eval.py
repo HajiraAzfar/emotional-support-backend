@@ -204,6 +204,8 @@ def safety_paths() -> None:
         for _ in range(3):
             assert rt.evidence_for_turn(query, None, rx.risk(), lazy, copies, wide, rx.sources()).ids == evidence.ids
         assert builds == [True, True, False], builds
+        warmed = rt.LazyIndex(lambda: build(False))  # warm() at startup builds once; searches reuse it
+        assert warmed.warm() is index and warmed.warm() is index and builds == [True, True, False, False], builds
 
         # The English rewrite is a search provider: a risky turn never reaches it, and its failures are no evidence.
         rewrites = []
@@ -239,17 +241,16 @@ def safety_paths() -> None:
     assert clean == "Try a worry period [S1], or this." and kept == ["S1"], (clean, kept)
     assert rt.without_ids("Try a worry period [S1]. Or that (S2) [s3].") == "Try a worry period. Or that."
     assert rt.without_ids("No ids [here], [0-10] stays") == "No ids [here], [0-10] stays"
-    if not settings.OPENAI_EMBEDDING_MODEL:
-        try:
-            llm_client.embed(["x"], 1.0)
-            raise AssertionError("embed ran with no embedding model configured")
-        except llm_client.LLMError:
-            pass
-        try:
-            llm_client.search_query("x", 1.0)
-            raise AssertionError("search_query ran with no embedding model configured")
-        except llm_client.LLMError:
-            pass
+    default_model, settings.OPENAI_EMBEDDING_MODEL = settings.OPENAI_EMBEDDING_MODEL, None
+    try:
+        for call in (lambda: llm_client.embed(["x"], 1.0), lambda: llm_client.search_query("x", 1.0)):
+            try:
+                call()
+                raise AssertionError("an embedding-path call ran with no embedding model configured")
+            except llm_client.LLMError:
+                pass
+    finally:
+        settings.OPENAI_EMBEDDING_MODEL = default_model
     print("safety paths: risky turns skipped, errors give no evidence, lazy index built once, citations checked")
 
 

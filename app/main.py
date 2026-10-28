@@ -1,4 +1,6 @@
 import logging
+import threading
+from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
 
@@ -8,7 +10,15 @@ from app.routers import auth, crisis, exposure, health, onboarding, entries, lib
 logging.basicConfig(level=logging.WARNING)
 logging.getLogger("app").setLevel(logging.INFO)
 
-app = FastAPI()
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    # RAG: embed the knowledge cards in the background, so the first chat turn doesn't pay for it.
+    threading.Thread(target=entries.warm_rag, daemon=True).start()
+    yield
+
+
+app = FastAPI(lifespan=lifespan)
 
 app.include_router(health.router)
 app.include_router(auth.router)

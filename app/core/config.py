@@ -23,11 +23,11 @@ class Settings(BaseSettings):
     # stronger model than the journals without changing every call.
     OPENAI_CHAT_MODEL: str | None = None
     # RAG: the embedding model (or Azure deployment) for knowledge cards, on the same client.
-    # Unset: no embeddings, so retrieval finds no evidence.
-    OPENAI_EMBEDDING_MODEL: str | None = None
-    # RAG: the similarity (0-1) a card needs to be used, measured with evals/rag_eval.py --live --rewrite.
-    # Unset: no threshold, so every turn abstains even with RAG_ENABLED on.
-    RAG_THRESHOLD: float | None = None
+    # Deployed on the Korea Central resource. Unset: no embeddings, so retrieval finds no evidence.
+    OPENAI_EMBEDDING_MODEL: str | None = "text-embedding-3-small"
+    # RAG: the similarity (0-1) a card needs to be used, measured with evals/rag_eval.py --live --rewrite
+    # (app questions scored 0.53-0.72, irrelevant ones at most 0.19). Unset: every turn abstains.
+    RAG_THRESHOLD: float | None = 0.35
     # Voice messages: Groq's Whisper large v3. Unset turns voice off — the app
     # falls back to typing. Reads VoiceEntry too, which is what the key is
     # called in .env.
@@ -35,9 +35,10 @@ class Settings(BaseSettings):
     OPENAI_TIMEOUT_SECONDS: float = 30.0
     # true → no OpenAI calls; fixed placeholder replies so the app can be tested without a key.
     LLM_MOCK: bool = False
-    # RAG Phase 2: evidence retrieval (app/core/retrieval.py). Off: retrieval returns nothing.
-    # Nothing in AI Chat calls it yet, so turning it on changes no reply.
-    RAG_ENABLED: bool = False
+    # RAG: evidence from knowledge cards in AI Chat (app/core/retrieval.py), on by default (owner's
+    # decision, 28 Oct 2026). Only approved cards from cleared sources are used: today the app-help
+    # cards. RAG_ENABLED=false turns it off with no code change.
+    RAG_ENABLED: bool = True
     # Prints each verification code to the console. Only for local development,
     # where Resend will not deliver to anyone but the account owner: on a server
     # it would write login codes into logs that are kept.

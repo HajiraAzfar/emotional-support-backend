@@ -88,9 +88,18 @@ def _rag_config() -> retrieval.RetrievalConfig:
 # A card is used only when approved and from a cleared source, with RAG_ENABLED on and RAG_THRESHOLD
 # set; otherwise every turn abstains before any search. Tests swap these in.
 RAG_CARDS, RAG_SOURCES, RAG_CONFIG = md_loader.knowledge_cards(), None, _rag_config()
-RAG_SEARCH = retrieval.RewrittenQuery(
-    retrieval.LazyIndex(lambda: retrieval.InMemoryIndex(RAG_CARDS, llm_client.embed, RAG_SOURCES)),
-    llm_client.search_query)
+RAG_INDEX = retrieval.LazyIndex(lambda: retrieval.InMemoryIndex(RAG_CARDS, llm_client.embed, RAG_SOURCES))
+RAG_SEARCH = retrieval.RewrittenQuery(RAG_INDEX, llm_client.search_query)
+
+
+def warm_rag() -> None:
+    """At startup: embeds the usable cards before the first chat turn needs them. Never raises."""
+    if not (settings.RAG_ENABLED and settings.OPENAI_API_KEY and not settings.LLM_MOCK):
+        return
+    try:
+        RAG_INDEX.warm()
+    except Exception as exc:  # the first search simply tries again
+        logger.warning("RAG warm-up failed: %s", type(exc).__name__)
 
 
 # ---------- helpers ----------

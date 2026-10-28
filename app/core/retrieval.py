@@ -448,12 +448,15 @@ class LazyIndex:
     def __init__(self, build: Callable[[], Search]):
         self._build, self._index, self._lock = build, None, threading.Lock()
 
-    def search(self, query: str, top_k: int, topics: frozenset[str] | None, timeout_seconds: float):
-        # ponytail: the first search waits for every card to be embedded; warm it at startup once RAG is on.
+    def warm(self) -> Search:
+        """Builds the index now (at startup), so the first search doesn't wait for every card to be embedded."""
         with self._lock:
             if self._index is None:
                 self._index = self._build()
-        return self._index.search(query, top_k, topics, timeout_seconds)
+            return self._index
+
+    def search(self, query: str, top_k: int, topics: frozenset[str] | None, timeout_seconds: float):
+        return self.warm().search(query, top_k, topics, timeout_seconds)
 
 
 class RewrittenQuery:

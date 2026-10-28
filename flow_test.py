@@ -104,6 +104,8 @@ def complete_check_in(note="", traps=None):
 
 settings.OPENAI_API_KEY = None
 print("--- lexical tiers")
+# RAG is on by default in the app; section F3 tests it, and every other section checks the app without it.
+settings.RAG_ENABLED = False
 for text, want in [("aaj acha din tha", "clear"), ("honestly what's the point", "mild"), ("I want to kill myself", "danger"),
                    ("I'm going to kill myself tonight", "emergency"), ("took all the sleeping pills", "emergency"),
                    ("dying to see this movie", "clear"), ("zindagi khatam, jeena nahi chahti", "danger"), ("mujhe ab jeene ka koi dil nahi karta", "danger"), ("aaj jeene ka maza aa gaya", "clear"),
@@ -347,9 +349,10 @@ with patch.object(lc, "_get_client", return_value=fake):
     fake.responses.parse.side_effect = parse
     model.update(risk="clear")
 
-print("--- F3: RAG Step A: retrieval wired into AI Chat, off by default")
+print("--- F3: RAG: retrieval in AI Chat (on by default)")
 from contextlib import nullcontext  # noqa: E402
 from app.core import retrieval as rt  # noqa: E402
+from app.core.config import Settings  # noqa: E402
 from app.routers import entries as entries_router  # noqa: E402
 from evals import retrieval_eval as rx  # noqa: E402  (synthetic cards, fake embedder, invented cleared source)
 
@@ -409,19 +412,19 @@ with patch.object(lc, "_get_client", return_value=fake):
     model.update(risk="clear", safety=NO_HARM, reflection_crisis=False, replies=[])
     base, base_prompt, base_shape = chat_turn(worry)
     check(base_shape == ["ChatReply"] and "# Using the evidence below" not in base_prompt
-          and entries_router.RAG_CONFIG is rt.PRODUCTION and len(entries_router.RAG_CARDS) >= 8
-          and all(c["source_id"] == "reframe-app-help" for c in rt.usable_cards(entries_router.RAG_CARDS))
-          and not settings.RAG_ENABLED,
-          "F3: by default no clinical card is usable (only owner-approved app-help cards may be), the uncalibrated "
-          "production config, RAG off and the plain ChatReply")
+          and Settings.model_fields["RAG_ENABLED"].default is True and entries_router.RAG_CONFIG.threshold == 0.35
+          and not rt.config_problems(entries_router.RAG_CONFIG) and len(entries_router.RAG_CARDS) >= 8
+          and all(c["source_id"] == "reframe-app-help" for c in rt.usable_cards(entries_router.RAG_CARDS)),
+          "F3: by default RAG is on with the 0.35 threshold, and no clinical card is usable (only owner-approved "
+          "app-help cards are); with RAG off the reply is the plain ChatReply")
 
-    configs = {}
+    configs, default_threshold = {}, settings.RAG_THRESHOLD
     for value in (None, 0.35, 1.5):
         settings.RAG_THRESHOLD = value
         try:
             configs[value] = entries_router._rag_config()
         finally:
-            settings.RAG_THRESHOLD = None
+            settings.RAG_THRESHOLD = default_threshold
     check(configs[None] is rt.PRODUCTION and configs[0.35].threshold == 0.35 and not rt.config_problems(configs[0.35])
           and configs[0.35].timeout_seconds == rt.MAX_TIMEOUT_SECONDS and rt.config_problems(configs[1.5]),
           "RAG_THRESHOLD: unset is the production config (abstains), 0.35 a valid config, 1.5 refused")
@@ -432,11 +435,11 @@ with patch.object(lc, "_get_client", return_value=fake):
     check(spy.calls == 0 and prompt == base_prompt and shape == ["ChatReply"] and same(got, base),
           "RAG off: the index is never searched, the prompt is byte-identical, the plain ChatReply")
 
-    # 2. On, but the production config has no calibrated threshold: it abstains before any search.
+    # 2. On, but with no calibrated threshold (RAG_THRESHOLD unset): it abstains before any search.
     spy = SearchSpy(index)
-    got, prompt, shape = chat_turn(worry, rag=True, RAG_SEARCH=spy, **FAKE)
+    got, prompt, shape = chat_turn(worry, rag=True, RAG_SEARCH=spy, RAG_CONFIG=rt.PRODUCTION, **FAKE)
     check(spy.calls == 0 and prompt == base_prompt and shape == ["ChatReply"] and same(got, base),
-          "RAG on with the production config: abstains (no threshold), prompt and reply unchanged")
+          "RAG on with no threshold (RAG_THRESHOLD unset): abstains before any search, prompt and reply unchanged")
 
     # 3. On, the test threshold and approved fake cards: evidence, the cited shape, citations enforced.
     model.update(cited_text="Try a short worry period [S1]. A study proves it [S9].", cited_ids=["S1", "S9"])
@@ -493,7 +496,11 @@ with patch.object(lc, "_get_client", return_value=fake):
         got, prompt, shape = chat_turn(worry, rag=True, RAG_CONFIG=rx.TEST, RAG_SEARCH=spy, **FAKE)
         check(spy.calls == 1 and prompt == base_prompt and shape == ["ChatReply"] and same(got, base),
               f"a failing search ({type(error).__name__}) gives the normal reply, never a fallback")
-    got, prompt, shape = chat_turn(worry, rag=True, RAG_CONFIG=rx.TEST, **FAKE)  # the default index, with no embedding model set
+    default_model, settings.OPENAI_EMBEDDING_MODEL = settings.OPENAI_EMBEDDING_MODEL, None
+    try:
+        got, prompt, shape = chat_turn(worry, rag=True, RAG_CONFIG=rx.TEST, **FAKE)  # the default index, with no embedding model set
+    finally:
+        settings.OPENAI_EMBEDDING_MODEL = default_model
     check(prompt == base_prompt and same(got, base), "the default index, with no embedding model set, never breaks a reply")
 
     # Step B. An earlier reply's [S1] is stored as she saw it, but the model never sees it again.
