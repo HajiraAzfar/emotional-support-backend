@@ -140,20 +140,26 @@
       "published": null,
       "licence": {
         "name": "Original text written for this app on 2026-10-28",
-        "status": "unverified",
-        "verified_from": [],
-        "notes": "How to use the app, written from its screens as described in DEVLOG.md. Not clinical content, so no clinician review is needed, but nothing is granted until the owner checks the cards against the app."
+        "status": "verified",
+        "verified_from": [
+          "https://github.com/HajiraAzfar/emotional-support-backend"
+        ],
+        "notes": "Original text written for this app and confirmed by the owner on 2026-10-28 after checking each card against the app. Not clinical content, so no clinician review is needed."
       },
       "commercial_use": "not_applicable",
       "permissions": {
-        "store": "not_granted",
-        "embed": "not_granted",
-        "adapt": "not_granted",
-        "translate": "not_granted",
-        "display": "not_granted"
+        "store": "granted",
+        "embed": "granted",
+        "adapt": "granted",
+        "translate": "granted",
+        "display": "granted"
       },
-      "permission_evidence": null,
-      "next_action": "The owner checks each card against the current app, grants store and embed in writing under permission_evidence, and removes the card's DRAFT marker. Re-check a card whenever its screen changes."
+      "permission_evidence": {
+        "granted_by": "Hajira (HajiraAzfar), app owner",
+        "granted_on": "2026-10-28",
+        "reference": "Approved in the 28 Oct 2026 development session after checking the 12 cards against the app; recorded in DEVLOG.md (RAG: app-help cards approved)"
+      },
+      "next_action": "Re-check a card against the app whenever its screen changes, and correct or withdraw it."
     }
   ]
 }
