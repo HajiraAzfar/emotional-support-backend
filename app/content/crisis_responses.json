@@ -5,14 +5,14 @@
   "status": "DRAFT — must be authored and approved by the Clinical Advisor before release (FR-CRIS-008)",
   "mild": {
     "reference": {
-      "english": "If things ever feel too heavy, trained counsellors are free to talk to. Their numbers, hours and languages are under Get help.",
-      "roman_urdu": "Agar kabhi sab bohat bhaari lage, to trained counsellors se muft baat ho sakti hai. Unke numbers, timings aur zubaan Get help mein hain."
+      "english": "If things ever feel too heavy, trained counsellors are free to talk to. Their numbers are under Get help.",
+      "roman_urdu": "Agar kabhi sab bohat bhaari lage, to trained counsellors se muft baat ho sakti hai. Unke numbers Get help mein hain."
     }
   },
   "danger": {
     "full": {
-      "english": "That sounds really painful, and I'm glad you told me. You don't have to carry this alone. The counsellors under Get help are free and confidential, and their hours and languages are listed there.",
-      "roman_urdu": "Ye sun ke bohat dukh hua, aur acha kiya jo aap ne bataya. Ye bojh akele uthane ki zaroorat nahi. Get help mein muft aur confidential counsellors hain, unki timings aur zubaan ke saath."
+      "english": "That sounds really painful, and I'm glad you told me. You don't have to carry this alone. The counsellors under Get help are free and confidential.",
+      "roman_urdu": "Ye sun ke bohat dukh hua, aur acha kiya jo aap ne bataya. Ye bojh akele uthane ki zaroorat nahi. Get help mein muft aur confidential counsellors hain."
     },
     "abbreviated": {
       "english": "You don't have to carry this alone. Free counsellors are under Get help.",
