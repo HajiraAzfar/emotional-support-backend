@@ -76,10 +76,12 @@ def offline() -> None:
     assert who["published"] == "2020-04-29"
     assert (cci["licence"]["status"], cci["commercial_use"]) == ("unverified", "unknown")
     assert nhs["commercial_use"] == "requires_licence"
+    # Only the app's own help cards (not clinical) may be cleared by the owner; no clinical source is, yet.
+    clinical = [s for s in sources if s["id"] != "reframe-app-help"]
     assert all(set(s["permissions"].values()) == {"not_granted"} and s["permission_evidence"] is None
-               for s in sources), "no source has a documented permission yet"
-    assert kn.ingestable_sources() == [], [s["id"] for s in kn.ingestable_sources()]
-    assert not any(kn.cleared_for_ingestion(s) for s in sources)
+               for s in clinical), "no clinical source has a documented permission yet"
+    assert {s["id"] for s in kn.ingestable_sources()} <= {"reframe-app-help"}, [s["id"] for s in kn.ingestable_sources()]
+    assert not any(kn.cleared_for_ingestion(s) for s in clinical)
 
     # A fully documented entry is cleared: the rule is not hard-wired to an empty list.
     assert kn.problems(cleared()) == [], kn.problems(cleared())

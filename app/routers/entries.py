@@ -71,11 +71,23 @@ REPLY_UNAVAILABLE = (
 )
 
 
+def _rag_config() -> retrieval.RetrievalConfig:
+    """
+    PRODUCTION (no threshold, so every turn abstains) unless RAG_THRESHOLD is set. An out-of-range
+    value is an invalid config, which abstains too. The budget covers the English rewrite and the search.
+    """
+    if settings.RAG_THRESHOLD is None:
+        return retrieval.PRODUCTION
+    return retrieval.RetrievalConfig(threshold=settings.RAG_THRESHOLD,
+                                     calibration="RAG_THRESHOLD, measured with evals/rag_eval.py --live --rewrite",
+                                     top_k=3, timeout_seconds=retrieval.MAX_TIMEOUT_SECONDS)
+
+
 # What AI Chat retrieves from: the cards in app/knowledge/cards, embedded on the first search
 # (llm_client.embed); each message is searched as a short English query (llm_client.search_query).
-# No card is approved, no source is cleared and PRODUCTION has no calibrated threshold, so with
-# RAG_ENABLED on or off every turn abstains before any search. Tests swap these in.
-RAG_CARDS, RAG_SOURCES, RAG_CONFIG = md_loader.knowledge_cards(), None, retrieval.PRODUCTION
+# A card is used only when approved and from a cleared source, with RAG_ENABLED on and RAG_THRESHOLD
+# set; otherwise every turn abstains before any search. Tests swap these in.
+RAG_CARDS, RAG_SOURCES, RAG_CONFIG = md_loader.knowledge_cards(), None, _rag_config()
 RAG_SEARCH = retrieval.RewrittenQuery(
     retrieval.LazyIndex(lambda: retrieval.InMemoryIndex(RAG_CARDS, llm_client.embed, RAG_SOURCES)),
     llm_client.search_query)

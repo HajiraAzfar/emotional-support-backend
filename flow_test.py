@@ -410,9 +410,21 @@ with patch.object(lc, "_get_client", return_value=fake):
     base, base_prompt, base_shape = chat_turn(worry)
     check(base_shape == ["ChatReply"] and "# Using the evidence below" not in base_prompt
           and entries_router.RAG_CONFIG is rt.PRODUCTION and len(entries_router.RAG_CARDS) >= 8
-          and rt.usable_cards(entries_router.RAG_CARDS) == [] and not settings.RAG_ENABLED,
-          "F3: by default AI Chat has only draft, uncleared cards (none usable), the uncalibrated production config, "
-          "RAG off and the plain ChatReply")
+          and all(c["source_id"] == "reframe-app-help" for c in rt.usable_cards(entries_router.RAG_CARDS))
+          and not settings.RAG_ENABLED,
+          "F3: by default no clinical card is usable (only owner-approved app-help cards may be), the uncalibrated "
+          "production config, RAG off and the plain ChatReply")
+
+    configs = {}
+    for value in (None, 0.35, 1.5):
+        settings.RAG_THRESHOLD = value
+        try:
+            configs[value] = entries_router._rag_config()
+        finally:
+            settings.RAG_THRESHOLD = None
+    check(configs[None] is rt.PRODUCTION and configs[0.35].threshold == 0.35 and not rt.config_problems(configs[0.35])
+          and configs[0.35].timeout_seconds == rt.MAX_TIMEOUT_SECONDS and rt.config_problems(configs[1.5]),
+          "RAG_THRESHOLD: unset is the production config (abstains), 0.35 a valid config, 1.5 refused")
 
     # 1. Off: no search and the same prompt, even with cards, a working index and the test threshold in place.
     spy = SearchSpy(index)

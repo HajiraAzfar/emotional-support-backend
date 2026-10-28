@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     # RAG: the embedding model (or Azure deployment) for knowledge cards, on the same client.
     # Unset: no embeddings, so retrieval finds no evidence.
     OPENAI_EMBEDDING_MODEL: str | None = None
+    # RAG: the similarity (0-1) a card needs to be used, measured with evals/rag_eval.py --live --rewrite.
+    # Unset: no threshold, so every turn abstains even with RAG_ENABLED on.
+    RAG_THRESHOLD: float | None = None
     # Voice messages: Groq's Whisper large v3. Unset turns voice off — the app
     # falls back to typing. Reads VoiceEntry too, which is what the key is
     # called in .env.

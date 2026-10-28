@@ -19,7 +19,7 @@ import functools
 import sys
 import time
 
-from app.core import llm_client, md_loader, retrieval as rt
+from app.core import knowledge as kn, llm_client, md_loader, retrieval as rt
 from app.core.config import settings
 from app.core.knowledge import DRAFT_MARKER
 from evals import retrieval_eval as rx
@@ -89,7 +89,17 @@ def gate(cards) -> list[dict]:
     """The real cards, the real gate. Returns the test-only approved copies."""
     ids = [c.get("id") for c in cards]
     assert len(ids) >= 20 and len(set(ids)) == len(ids), ids
-    assert rt.usable_cards(cards) == [], "a card passed the real gate: none is approved or cleared"
+    # The real registry: no clinical card passes; only app-help cards may, once the owner approves them.
+    assert all(c["source_id"] == "reframe-app-help" for c in rt.usable_cards(cards)), "a clinical card passed the real gate"
+    # That approval, simulated in memory: every app-help card passes, every clinical card is still refused.
+    app = next(s for s in kn.load_sources() if s["id"] == "reframe-app-help")
+    granted = {**app, "licence": {**app["licence"], "status": "verified", "verified_from": ["https://example.invalid/approval"]},
+               "permissions": {use: "granted" for use in app["permissions"]},
+               "permission_evidence": {"granted_by": "rag_eval", "granted_on": "2026-10-28", "reference": "simulation"}}
+    registry = [s for s in kn.load_sources() if s["id"] != "reframe-app-help"] + [granted]
+    approved = [{**c, "clinical_status": "approved"} if c["source_id"] == "reframe-app-help" else c for c in cards]
+    passed = {c["id"] for c in rt.usable_cards(approved, registry)}
+    assert passed == {c["id"] for c in cards if c["source_id"] == "reframe-app-help"} and len(passed) >= 12, passed
     copies = test_copies(cards)
     # Draft status and an uncleared source are each card's only problems.
     assert {c["id"] for c in rt.usable_cards(copies, rx.sources())} == set(ids)
