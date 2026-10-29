@@ -427,7 +427,9 @@ def _inconsistent_risk(index) -> None:
         (rt.TurnRisk("clear", None, safety(danger_now="yes")), "danger signal"),
         (rt.TurnRisk("clear", None, safety(danger_now="unclear")), "danger signal"),
         (risk("clear", safety(danger_now="unclear")), "danger signal"),  # triage itself says nothing here
-        (rt.TurnRisk("clear", None, safety(distress_now=True)), "distress now"),
+        (rt.TurnRisk("clear", None, safety(distress_now=True, harm_type="self_harm", timing="past", discloses=True)), "harm"),
+        (rt.TurnRisk("clear", None, safety(distress_now=True, danger_now="unclear")), "danger signal"),
+        (rt.TurnRisk("mild", None, safety(distress_now=True)), "risk tier (mild)"),
         (rt.TurnRisk("clear", None, safety(timing="ongoing")), "inconsistent safety"),
         (rt.TurnRisk("clear", None, safety(discloses=True)), "inconsistent safety"),
         (rt.TurnRisk("danger", None, NO_HARM), "risk tier (danger)"),  # triage would say tier 1
@@ -438,6 +440,8 @@ def _inconsistent_risk(index) -> None:
         ev = turn("worry at night", spy, turn_risk=bad)
         assert spy.calls == 0 and ev.items == () and ev.reason == f"skipped: {why}", (bad, ev)
     assert cited(turn("worry at night", index, turn_risk=risk("clear", safety(asks_for_help=True)))) == ["fx-worry"]
+    # Distress alone is what self-help cards are for (29 Oct 2026): with no harm, danger or tier, it retrieves.
+    assert cited(turn("worry at night", index, turn_risk=risk("clear", safety(distress_now=True, asks_for_help=True)))) == ["fx-worry"]
 
 
 def _crisis_bypass(index) -> None:

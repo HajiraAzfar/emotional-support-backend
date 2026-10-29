@@ -625,6 +625,10 @@ def _chat_reply(
     if evidence.items:
         # Only ids retrieved for this turn survive; invented citation formats are removed.
         outcome.reply_text, kept = retrieval.enforce_citations(outcome.reply_text, reply.citations, evidence)
+        # Licence: a card adapted from someone else's work is credited under the reply, whatever the model wrote.
+        credits = evidence.credits(kept)
+        if credits:
+            outcome.reply_text += "\n\n" + "\n".join(credits)
         logger.info("chat reply entry=%s citations=%s", entry.id, kept)
     return outcome
 

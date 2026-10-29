@@ -243,6 +243,11 @@ def safety_paths() -> None:
     finally:
         settings.RAG_ENABLED = False
 
+    # A source that asks for credit gets one line under the reply, only when one of its cards is cited.
+    who = {"id": "who-dwm", "title": "Guide", "url": "https://example.invalid", "attribution": "Adapted from WHO; not created by WHO."}
+    credited = rt.Evidence((rt.Cited("S1", {"id": "who-x"}, who, 0.9), rt.Cited("S2", {"id": "app-x"}, {"id": "app"}, 0.8)))
+    assert credited.credits(["S1", "S2"]) == ["Adapted from WHO; not created by WHO."] and credited.credits(["S2"]) == []
+    assert credited.credits([]) == []
     # Only this turn's ids survive; old ids are hidden from the model.
     clean, kept = rt.enforce_citations("Try a worry period [S1], or this [S7] (Beck, 2011).", ["S1", "S7"], evidence)
     assert clean == "Try a worry period [S1], or this." and kept == ["S1"], (clean, kept)

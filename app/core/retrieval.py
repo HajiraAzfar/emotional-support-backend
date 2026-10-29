@@ -229,6 +229,11 @@ class Evidence:
                        "source_title": c.source["title"], "source_url": c.source["url"]}
                 for c in self.items if wanted is None or c.id in wanted}
 
+    def credits(self, ids) -> list[str]:
+        """The credit lines a licence asks for (a source's `attribution`), for the cited cards' sources, each once."""
+        wanted = set(ids or ())
+        return sorted({c.source["attribution"] for c in self.items if c.id in wanted and c.source.get("attribution")})
+
     def block(self) -> str | None:
         """The prompt section for this turn's evidence, or None when there is none."""
         if not self.items:
@@ -258,7 +263,12 @@ def _checked_safety(safety) -> Safety | None:
 
 
 def skip_reason(risk) -> str | None:
-    """Retrieval serves only a turn with no risk at all; anything else, or anything unclear, is a reason not to."""
+    """
+    Retrieval serves only a turn with no risk: no harm, no danger signal, a clear tier and no triage level.
+    Distress alone (sad, stressed, harsh on oneself) is not a risk here: those are the turns self-help cards
+    are for (the owner's decision, 29 Oct 2026; the classifier marks nearly every emotional question as
+    distress). Anything else, or anything unclear, is a reason not to.
+    """
     if not isinstance(risk, TurnRisk):
         return "no triage"
     if risk.level == crisis.TIER1:
@@ -274,8 +284,6 @@ def skip_reason(risk) -> str | None:
         return "harm"
     if safety.danger_now != "no":
         return "danger signal"
-    if safety.distress_now:
-        return "distress now"
     if safety.timing != "none" or safety.discloses:
         return "inconsistent safety"  # the classifier gives timing "none" and no disclosure without harm
     if risk.tier != "clear":

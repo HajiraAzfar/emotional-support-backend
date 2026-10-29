@@ -3,8 +3,8 @@ id: who-values
 title: Acting on your values (WHO guide, part 3)
 source_id: who-dwm
 locator: Part 3: Acting on your values
-topics: low_mood, distraction, grief, positive
-search_terms: values, what matters to me, what kind of person I want to be, meaningful small actions, zindagi mein kya ahem hai, apne usool
+topics: low_mood, low_self_esteem, relationship_issues, distraction, lack_of_self_control, overwhelmed, overthinking, grief, positive
+search_terms: values, act on my values, live by my values when life is hard, what matters to me, what kind of person I want to be, meaningful small actions, zindagi mein kya ahem hai, apne usool
 licence: CC BY-NC-SA 3.0 IGO (adapted; not created by WHO)
 clinical_status: approved
 approved_by: app owner (Hajira), 2026-10-29, for the FYP demo; NOT yet clinically reviewed
