@@ -414,9 +414,9 @@ with patch.object(lc, "_get_client", return_value=fake):
     check(base_shape == ["ChatReply"] and "# Using the evidence below" not in base_prompt
           and Settings.model_fields["RAG_ENABLED"].default is True and entries_router.RAG_CONFIG.threshold == 0.35
           and not rt.config_problems(entries_router.RAG_CONFIG) and len(entries_router.RAG_CARDS) >= 8
-          and all(c["source_id"] == "reframe-app-help" for c in rt.usable_cards(entries_router.RAG_CARDS)),
-          "F3: by default RAG is on with the 0.35 threshold, and no clinical card is usable (only owner-approved "
-          "app-help cards are); with RAG off the reply is the plain ChatReply")
+          and {c["source_id"] for c in rt.usable_cards(entries_router.RAG_CARDS)} <= {"reframe-app-help", "who-dwm"},
+          "F3: by default RAG is on with the 0.35 threshold; only owner-approved app-help and WHO cards are usable, "
+          "never Reframe's own CBT cards; with RAG off the reply is the plain ChatReply")
 
     configs, default_threshold = {}, settings.RAG_THRESHOLD
     for value in (None, 0.35, 1.5):

@@ -93,8 +93,9 @@ def gate(cards) -> list[dict]:
     """The real cards, the real gate. Returns the test-only approved copies."""
     ids = [c.get("id") for c in cards]
     assert len(ids) >= 20 and len(set(ids)) == len(ids), ids
-    # The real registry: no clinical card passes; only app-help cards may, once the owner approves them.
-    assert all(c["source_id"] == "reframe-app-help" for c in rt.usable_cards(cards)), "a clinical card passed the real gate"
+    # The real registry: only owner-approved app-help and WHO cards may pass; Reframe's own CBT cards never do
+    # until a clinician approves them.
+    assert {c["source_id"] for c in rt.usable_cards(cards)} <= {"reframe-app-help", "who-dwm"}, "a CBT card passed the gate"
     # That approval, simulated in memory: every app-help card passes, every clinical card is still refused.
     app = next(s for s in kn.load_sources() if s["id"] == "reframe-app-help")
     granted = {**app, "licence": {**app["licence"], "status": "verified", "verified_from": ["https://example.invalid/approval"]},
@@ -103,7 +104,9 @@ def gate(cards) -> list[dict]:
     registry = [s for s in kn.load_sources() if s["id"] != "reframe-app-help"] + [granted]
     approved = [{**c, "clinical_status": "approved"} if c["source_id"] == "reframe-app-help" else c for c in cards]
     passed = {c["id"] for c in rt.usable_cards(approved, registry)}
-    assert passed == {c["id"] for c in cards if c["source_id"] == "reframe-app-help"} and len(passed) >= 11, passed
+    app_ids = {c["id"] for c in cards if c["source_id"] == "reframe-app-help"}
+    assert app_ids <= passed and len(app_ids) >= 11 and not any(c["source_id"] == "reframe-original" and c["id"] in passed
+                                                                 for c in cards), passed
     copies = test_copies(cards)
     # Draft status and an uncleared source are each card's only problems.
     assert {c["id"] for c in rt.usable_cards(copies, rx.sources())} == set(ids)

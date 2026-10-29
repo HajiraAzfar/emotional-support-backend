@@ -6,7 +6,8 @@ locator: Part 3: Acting on your values
 topics: low_mood, distraction, grief, positive
 search_terms: values, what matters to me, what kind of person I want to be, meaningful small actions, zindagi mein kya ahem hai, apne usool
 licence: CC BY-NC-SA 3.0 IGO (adapted; not created by WHO)
-clinical_status: DRAFT_NOT_CLINICALLY_APPROVED
+clinical_status: approved
+approved_by: app owner (Hajira), 2026-10-29, for the FYP demo; NOT yet clinically reviewed
 ---
 Values are what you want to stand for: how you want to treat yourself, other people and the world around you, for example being caring, brave or patient. In hard times you may not control what happens, but you can choose how you act. Ask: what kind of person do I want to be in this situation? Then pick one small action in line with that value, even something you can do today, like helping someone or doing a task with care.
 

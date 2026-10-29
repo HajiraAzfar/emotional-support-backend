@@ -40,7 +40,7 @@
         "granted_on": "2026-10-28",
         "reference": "https://creativecommons.org/licenses/by-nc-sa/3.0/igo/ and the IRIS record https://iris.who.int/handle/10665/331901; the owner's decision is recorded in DEVLOG.md (RAG: WHO cards)"
       },
-      "next_action": "Clinical review of the adapted cards in app/knowledge/cards/who against the guide itself (wording and section), and a licence/attribution note in the app's About screen.",
+      "next_action": "The 5 adapted cards were turned on by the app owner on 2026-10-29 for the FYP demo WITHOUT clinical review. A clinician should check them against the guide itself (wording and sections); record the reviewer on each card, or set it back to draft if anything is wrong. Add a licence/attribution note to the app's About screen.",
       "use_decision": "Non-commercial: Reframe is a free student project with no ads or payments (owner, 2026-10-28). Conditions: credit WHO and the licence on every adapted card; say the adaptation was not created by WHO; share adaptations under the same licence; no WHO logo and no suggestion that WHO endorses the app. If the app becomes commercial, withdraw these grants and request WHO permission."
     },
     {
