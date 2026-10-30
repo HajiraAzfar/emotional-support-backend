@@ -1,8 +1,8 @@
-# mindDoc — Backend
+# Reframe — Backend
 
-REST API for **mindDoc**, a mobile journalling application providing structured emotional support through guided journal entries, crisis-aware safeguards, and an AI reflection layer.
+REST API for **Reframe**, a mobile journalling application providing structured emotional support through guided journal entries, crisis-aware safeguards, an AI reflection layer, and an AI Chat that can draw on approved knowledge cards.
 
-Implements **SRS-ESC-001 v0.9**. Progress, decisions and deviations are recorded in the project development log (`my dev log.md`), kept outside the repository.
+Implements **SRS-ESC-001 v0.9**. Progress, decisions and deviations are recorded in the project development log (`DEVLOG.md`), kept beside this repository, not in it.
 
 ---
 
@@ -74,6 +74,10 @@ ELEVATED_DISTRESS_THRESHOLD=9
 OPENAI_BASE_URL=https://<resource>.openai.azure.com/openai/v1/
 OPENAI_CLASSIFIER_MODEL=gpt-4.1-mini
 OPENAI_RESPONSE_MODEL=gpt-4.1-mini
+# RAG in AI Chat. These are the defaults; set RAG_ENABLED=false to turn it off.
+RAG_ENABLED=true
+OPENAI_EMBEDDING_MODEL=text-embedding-3-small
+RAG_THRESHOLD=0.35
 VoiceEntry=                    # Groq key for voice messages (Whisper large v3); unset turns voice off
 OPENAI_TIMEOUT_SECONDS=30
 LLM_MOCK=false                 # true → fixed placeholder replies, no API calls
@@ -93,6 +97,8 @@ app/
 ├── clinical_context/*.md     Guardrails per focus area — highest priority in a prompt
 ├── skills/<name>/SKILL.md    Response style per detected topic (Agent Skills format)
 ├── journal_types/*.md        Structure and pacing per journal
+├── chat_evidence.md          AI Chat's rules for using evidence cards (draft)
+├── knowledge/                RAG: sources.json (licences, permissions) and cards/<area>/<id>.md
 ├── content/                  Clinical content sets (JSON) — reviewable without reading code
 │   ├── capture_schedules/    Which values each journal records, in order
 │   ├── libraries/            Thinking traps, feelings, triggers
@@ -104,7 +110,7 @@ app/
 └── main.py                   Application entry point
 
 alembic/versions/             Migration scripts, applied in sequence
-evals/check_in_eval.py        Runs the real prompts against the model and checks SRS rules
+evals/                        check_in, triage, chat_grounding, knowledge, retrieval and rag evals
 postman/                      Postman collection with saved example responses
 ```
 
@@ -195,6 +201,20 @@ postman/                      Postman collection with saved example responses
 - A repeat danger response within 7 days is abbreviated (FR-CRIS-012).
 - Each non-clear assignment is recorded with tier, field, entry and time — **never the text** (FR-CRIS-013).
 - Crisis content is rendered from `content/crisis_responses.json` and is never generated (FR-CRIS-008).
+
+### AI Chat and knowledge cards (RAG)
+
+AI Chat is a plain chat stored as an entry of type `chat`. Every turn runs the crisis check and triage first (`crisis.triage`, `crisis.card_for`).
+
+- **Helplines card**: prominent on tier 1 and recent or ongoing violence; soft on other harm-related turns. Stress, or a request for help with no harm in it, gets none.
+- **Evidence**: a turn with no harm, danger signal, risk tier or triage level may use cards; distress alone is allowed (`retrieval.skip_reason`). The message becomes a short English search query (`llm_client.search_query`; small talk comes back empty, so no cards), is embedded (`llm_client.embed`) and searched by cosine similarity in memory, with a topic filter, a score of at least `RAG_THRESHOLD` and at most 3 cards.
+- **A card is used only if** it is `clinical_status: approved`, has no `DRAFT_NOT_CLINICALLY_APPROVED` marker, and its source is cleared in `knowledge/sources.json` (verified licence, documented permission to store and embed). Hits are re-checked against this on every turn.
+- **Citations**: cards are numbered per turn as `[S1]`; only this turn's ids survive in the reply, and invented ones are removed. Earlier ids are hidden from the model. A source with an `attribution` gets its credit line under the reply.
+- **Failures are safe**: a search error or the 5 s budget running out means no cards, never a crisis fallback. A failed evidence reply, or one that notices a crisis, is written again without cards, and a noticed crisis stays noticed.
+- **Ending a chat**: `POST /entries/{id}/conversation` with `{"choice": "end"}` closes it; it stays in History.
+- Cards are embedded in a background thread at startup (`entries.warm_rag`). No vector database is needed for this small set.
+
+Live today: 11 app-help cards and 5 cards adapted from WHO's *Doing What Matters in Times of Stress* (CC BY-NC-SA 3.0 IGO, non-commercial use; approved by the owner for the FYP demo, not clinically reviewed). The 10 Reframe CBT cards are drafts and are refused.
 
 ### AI reflection (SRS 4.9)
 
@@ -386,9 +406,11 @@ alembic downgrade -1
 
 ## Testing
 
-- **Flow suite:** `flow_test.py` at the repository root — 228 checks over the whole engine against an in-memory SQLite database. Run it with `python flow_test.py`; it touches nothing outside its own in-memory database.
+- **Flow suite:** `flow_test.py` at the repository root — 747 checks over the whole engine against an in-memory SQLite database. Run it with `python flow_test.py`; it touches nothing outside its own in-memory database.
 - **Postman:** `postman/echo-check-in.postman_collection.json` — 100 requests, 216 assertions, each with a saved example response from a real run. Set `seedEmail` and `seedPassword`, then run the folders in order. Folder 05 creates crisis detection records, so use a test account.
 - **Model behaviour:** `python -m evals.check_in_eval` runs the real prompts against the configured model and checks the rules that only show up in real output — one question per reply, no question in a closing message, the reply language, "aap" rather than "tum", and closure at the right turn. **Rerun it after any change to a prompt, skill, or clinical file.**
+- **Evals:** `python -m evals.triage_eval`, `evals.chat_grounding_eval`, `evals.knowledge_eval`, `evals.retrieval_eval` and `evals.rag_eval` run offline by default. `rag_eval` offline uses fake vectors, which check the plumbing only; `--live --rewrite` uses real embeddings and paid calls, and still assumes a clear risk rather than the real classifier.
+- **Release gate:** `python release_check.py` exits 1 while any clinical text is marked draft (70 files today). It is not wired into the deploy.
 - There is no automated test suite in CI yet.
 
 ---
@@ -398,8 +420,10 @@ alembic downgrade -1
 Live on FastAPI Cloud at
 **https://emotional-support-backend-a0039c1a.fastapicloud.dev**
 
-A push does **not** deploy. There is no GitHub Actions workflow here, so a
-deploy is run explicitly from a directory linked with `fastapi cloud link`:
+A push to `main` deploys: FastAPI Cloud is connected to this GitHub repository,
+and each deploy is listed under Deployments on GitHub. There is no GitHub Actions
+workflow, so nothing runs the tests or `release_check.py` first. A deploy can also
+be run by hand from a directory linked with `fastapi cloud link`:
 
 ```bash
 fastapi deploy
@@ -442,6 +466,8 @@ on the host, never in the repository:
 | `OPENAI_RESPONSE_MODEL` | no | `gpt-4.1-mini` |
 | `VoiceEntry` (or `GROQ_API_KEY`) | no | Groq key for voice messages; unset turns voice off and the app falls back to typing |
 | `APP_BASE_URL` | no | the deployed address, used in email links |
+
+RAG needs nothing here: `RAG_ENABLED`, `OPENAI_EMBEDDING_MODEL` and `RAG_THRESHOLD` have working defaults, and `text-embedding-3-small` must be deployed on the same Azure resource. Set `RAG_ENABLED=false` to turn RAG off without a code change.
 
 `LOG_VERIFICATION_CODES` must never be set on a host; its default `false` is
 what keeps login codes out of logs.
