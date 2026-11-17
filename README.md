@@ -54,8 +54,11 @@ Create a `.env` file in the project root. It is git-ignored and must **never** b
 ```env
 DATABASE_URL=postgresql://user:password@host:5432/database
 JWT_SECRET=<generate with: python -c "import secrets; print(secrets.token_urlsafe(32))">
-RESEND_API_KEY=re_...
 OPENAI_API_KEY=<Azure OpenAI key, or an api.openai.com key>
+# Email (verification and reset codes) goes out through Gmail SMTP. Unset: no email is sent,
+# so sign-up cannot finish. The password is a Google App Password, not the account's password.
+SMTP_USER=<the app's Gmail address>
+SMTP_PASSWORD=<16-letter App Password>
 ```
 
 Optional, with defaults shown:
@@ -65,7 +68,6 @@ JWT_ALGORITHM=HS256
 ACCESS_TOKEN_EXPIRE_MINUTES=15
 REFRESH_TOKEN_EXPIRE_DAYS=30
 CONSENT_VERSION=v1
-EMAIL_FROM=onboarding@resend.dev
 APP_BASE_URL=http://127.0.0.1:8000
 ELEVATED_DISTRESS_THRESHOLD=9
 
@@ -442,24 +444,25 @@ from that file works here and fails there, after a successful build:
   `fastapi-cli`, which the plain pin does not pull in. Without it the container
   dies with `RuntimeError: To use the fastapi command...`, which FastAPI Cloud
   surfaces only as a deployment stuck on "Verifying Readiness".
-- **`resend`** — imported by `app/core/email.py`.
 
-Both of these broke a deployment before being noticed. `numpy`, `scikit-learn`
+This broke a deployment before being noticed. `numpy`, `scikit-learn`
 and `sentence-transformers` are also undeclared, but they are reached only
 through `app/core/domain_detection.py`, which nothing on the app's runtime path
 imports.
 
 ### Settings
 
-`DATABASE_URL`, `JWT_SECRET` and `RESEND_API_KEY` have no defaults, so the app
-will not start without them, and `.env` is never uploaded. Eight settings belong
-on the host, never in the repository:
+`DATABASE_URL` and `JWT_SECRET` have no defaults, so the app will not start
+without them, and `.env` is never uploaded. Without `SMTP_USER` and
+`SMTP_PASSWORD` it starts but sends no email, so nobody can sign up. These
+settings belong on the host, never in the repository:
 
 | Key | Secret | Value |
 | --- | --- | --- |
 | `DATABASE_URL` | yes | the Supabase pooler URL |
 | `JWT_SECRET` | yes | — |
-| `RESEND_API_KEY` | yes | — |
+| `SMTP_USER` | no | the Gmail address email is sent from |
+| `SMTP_PASSWORD` | yes | a Google App Password for that account |
 | `OPENAI_API_KEY` | yes | — |
 | `OPENAI_BASE_URL` | yes | the Azure resource's `/openai/v1/` endpoint |
 | `OPENAI_CLASSIFIER_MODEL` | no | `gpt-4.1-mini` |
@@ -499,7 +502,7 @@ Recorded in full, with reasoning, in the project development log.
 - **The questionnaire instrument is a placeholder** (FR-INS-017): five generic items, not a validated measure.
 - **The learning library's articles are drafts.** Six Markdown files under `content/library/`, each saying in its own frontmatter that it awaits Clinical Advisor review. Searchable over title, summary and body; an article declares which thinking patterns it covers, which is how insights links to it.
 - **No data export** (FR-DATA-001); only per-entry deletion exists.
-- **No email delivery beyond the account holder's own address** until a sending domain is verified in Resend.
+- **Email goes through one Gmail account**: Gmail allows about 500 messages a day, and some may land in spam.
 - **Rate limiting is per-process** and resets on restart.
 - **Crisis tier boundaries are a draft split** of the regex rules, not a clinically defined criteria set.
 - No automated tests run in CI; verification to date is the Postman collection, the eval set, and manual testing.
@@ -512,4 +515,4 @@ Recorded in full, with reasoning, in the project development log.
 - The Supabase Data API is disabled for this project. The database is reachable only through this backend.
 - Access tokens are bearer credentials and should be treated with the same care as passwords.
 - User text is sent to the configured model provider for classification and reply generation. Crisis detection records deliberately store no text, and prompts wrap user-written values in `<user_text>` tags so they are treated as information rather than instructions.
-- Verification codes are printed to the console only when `LOG_VERIFICATION_CODES` is `true`. It defaults to `false`, which is what keeps login codes out of server logs. Set it in a local `.env` if you need to read a code while the Resend sending domain is unverified; **never set it on a deployed host.**
+- Verification codes are printed to the console only when `LOG_VERIFICATION_CODES` is `true`. It defaults to `false`, which is what keeps login codes out of server logs. Set it in a local `.env` if you need to read a code without SMTP set up; **never set it on a deployed host.**

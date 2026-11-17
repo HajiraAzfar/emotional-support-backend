@@ -1,5 +1,5 @@
 import os, pathlib, sys, uuid
-os.environ.update(DATABASE_URL="sqlite://", JWT_SECRET="x", RESEND_API_KEY="x")
+os.environ.update(DATABASE_URL="sqlite://", JWT_SECRET="x", SMTP_USER="")
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 from datetime import datetime, timedelta
 from types import SimpleNamespace

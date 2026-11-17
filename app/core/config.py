@@ -9,8 +9,10 @@ class Settings(BaseSettings):
     CONSENT_VERSION: str = "v1"
     REFRESH_TOKEN_EXPIRE_DAYS: int = 30
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 15
-    RESEND_API_KEY: str
-    EMAIL_FROM: str = "onboarding@resend.dev"
+    # Email goes out through Gmail SMTP (app/core/email.py): SMTP_USER is the Gmail address,
+    # SMTP_PASSWORD a Google App Password, not the account's password. Unset: no email is sent.
+    SMTP_USER: str | None = None
+    SMTP_PASSWORD: str | None = None
     APP_BASE_URL: str = "http://127.0.0.1:8000"
     ELEVATED_DISTRESS_THRESHOLD: int = 9
     OPENAI_API_KEY: str | None = None
@@ -40,8 +42,8 @@ class Settings(BaseSettings):
     # cards. RAG_ENABLED=false turns it off with no code change.
     RAG_ENABLED: bool = True
     # Prints each verification code to the console. Only for local development,
-    # where Resend will not deliver to anyone but the account owner: on a server
-    # it would write login codes into logs that are kept.
+    # where SMTP is usually not set up: on a server it would write login codes
+    # into logs that are kept.
     LOG_VERIFICATION_CODES: bool = False
     # FR-AIR-013: after this many Reframe replies in one conversation, the next reply must close it.
     CONVERSATION_CONTAINMENT_TURNS: int = 30

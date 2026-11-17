@@ -1,6 +1,6 @@
 # Render blueprint for the mindDoc backend.
 #
-# Secrets are NOT here: DATABASE_URL, JWT_SECRET, RESEND_API_KEY and
+# Secrets are NOT here: DATABASE_URL, JWT_SECRET, SMTP_USER, SMTP_PASSWORD and
 # OPENAI_API_KEY are marked sync:false, which makes Render ask for them in the
 # dashboard instead. Nothing secret belongs in a file that is committed.
 services:
@@ -24,7 +24,9 @@ services:
         sync: false
       - key: JWT_SECRET
         sync: false
-      - key: RESEND_API_KEY
+      - key: SMTP_USER
+        sync: false
+      - key: SMTP_PASSWORD
         sync: false
       - key: OPENAI_API_KEY
         sync: false

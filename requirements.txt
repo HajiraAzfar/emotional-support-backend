@@ -31,7 +31,6 @@ python-jose==3.5.0
 PyYAML==6.0.3
 # The PDF report (app/core/pdf_report.py).
 reportlab==4.4.4
-resend==2.43.0
 rsa==4.9.1
 six==1.17.0
 SQLAlchemy==2.0.52
