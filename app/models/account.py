@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from sqlalchemy import JSON, Boolean, Column, DateTime, Integer, String
 from sqlalchemy.dialects.postgresql import UUID, ARRAY
 
 from app.core.database import Base
@@ -27,5 +27,9 @@ class Account(Base):
     consent_at = Column(DateTime, nullable=True)
     distress_baseline = Column(Integer, nullable=True)
     distress_baseline_at = Column(DateTime, nullable=True)
+    # The app lock follows the account, so one PIN works on every phone it signs
+    # in on. This is what the phone made from the PIN, {"salt", "hash"} in hex,
+    # never the PIN itself. Null: no app lock.
+    app_lock_pin = Column(JSON, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow, nullable=False)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow, nullable=False)

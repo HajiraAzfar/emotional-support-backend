@@ -2075,6 +2075,17 @@ check(c.get("/auth/me").json()["preferred_name"] == "Hajira Azfar", "so does /au
 check(c.put("/onboarding/name", json={"name": "x" * 41}).status_code == 422, "a name over 40 characters is refused")
 check(c.put("/onboarding/name", json={"name": "   "}).json()["preferred_name"] is None, "a blank name clears it")
 
+print("--- app lock follows the account")
+pin = {"salt": "a1" * 16, "hash": "b2" * 32}
+check(c.get("/auth/app-lock").json() == {"pin": None}, "no app lock until one is set")
+check(c.put("/auth/app-lock", json={"pin": pin}).json() == {"pin": pin}, "the phone's salt and hash are kept")
+check(c.get("/auth/app-lock").json() == {"pin": pin}, "and come back to any phone that signs in")
+check(c.put("/auth/app-lock", json={"pin": {"salt": "a1" * 16, "hash": "123456"}}).status_code == 422,
+      "a PIN itself is refused: only a 64-character hex hash is kept")
+check(c.get("/auth/app-lock").json() == {"pin": pin}, "a refused change leaves the lock as it was")
+check(c.put("/auth/app-lock", json={"pin": None}).json() == {"pin": None}, "turning the lock off clears it")
+check(c.get("/auth/app-lock").json() == {"pin": None}, "for every phone")
+
 print("--- account deletion (SRS 4.12)")
 from app.core.account_deletion import ACCOUNT_TABLES
 from app.core.security import hash_password

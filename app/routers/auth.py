@@ -20,6 +20,7 @@ from app.core.verification import (
 from app.models.account import Account
 from app.schemas.account import (
     AccountResponse,
+    AppLock,
     DeleteAccountRequest,
     ForgotPasswordRequest,
     LoginRequest,
@@ -164,6 +165,26 @@ def refresh(payload: RefreshRequest, db: Session = Depends(get_db)):
 @router.get("/me", response_model=AccountResponse)
 def me(account: Account = Depends(get_current_user)):
     return account
+
+
+@router.get("/app-lock", response_model=AppLock)
+def get_app_lock(account: Account = Depends(get_current_user)):
+    """FR-AUTH-009, changed 18 Nov 2026 at the owner's request: the app lock
+    belongs to the account, so a phone signing in fetches its PIN hash here."""
+    return {"pin": account.app_lock_pin}
+
+
+@router.put("/app-lock", response_model=AppLock)
+def set_app_lock(
+    payload: AppLock,
+    account: Account = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Set, change or (with null) turn off the app lock, for every phone."""
+    row = db.get(Account, account.id)
+    row.app_lock_pin = payload.pin.model_dump() if payload.pin else None
+    db.commit()
+    return {"pin": row.app_lock_pin}
 
 
 @router.post("/delete-account", status_code=status.HTTP_204_NO_CONTENT)

@@ -14,6 +14,17 @@ class LoginRequest(BaseModel):
     password: str
 
 
+class AppLockPin(BaseModel):
+    # A salt and a slow hash, as the phone made them. Only hex is accepted, so a
+    # PIN typed in by mistake can never be stored as itself.
+    salt: str = Field(pattern=r"^[0-9a-f]{32}$")
+    hash: str = Field(pattern=r"^[0-9a-f]{64}$")
+
+
+class AppLock(BaseModel):
+    pin: AppLockPin | None = None
+
+
 class AccountResponse(BaseModel):
     id: uuid.UUID
     email: EmailStr
